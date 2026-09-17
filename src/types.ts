@@ -21,7 +21,7 @@ export interface McpSpec {
   secretEnv?: string[]; extra?: Record<string, unknown>; oauth?: { clientId: string; callbackPort: number };
 }
 export interface ToolPackages {
-  apt?: string; dnf?: string; apk?: string; pacman?: string; zypper?: string; brew?: string; winget?: string; scoop?: string;
+  apt?: string; dnf?: string; apk?: string; pacman?: string; zypper?: string; brew?: string; winget?: string; scoop?: string; choco?: string;
   npm?: string; go?: string; uvTool?: string; script?: Partial<Record<Platform, string>>;
 }
 export interface ToolSpec { kind: 'tool'; probe: string[]; versionRegex?: string; packages: ToolPackages; latest?: { npm?: string; github?: string }; postInstall?: Partial<Record<Platform, string[][]>>; strategy?: 'node' }

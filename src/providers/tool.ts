@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Action, Component, Ctx, Installed, Provider, ToolSpec } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
@@ -28,7 +29,7 @@ function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo
     case 'brew': return p.brew ? ['brew', 'install', ...split(p.brew)] : null;
     case 'winget': return p.winget ? ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'] : null;
     case 'scoop': return p.scoop ? ['scoop', 'install', ...split(p.scoop)] : null;
-    case 'choco': return p.scoop ? ['choco', 'install', '-y', ...split(p.scoop)] : null;
+    case 'choco': return p.choco ? ['choco', 'install', '-y', ...split(p.choco)] : null;
     default: return null;
   }
 }
@@ -96,13 +97,20 @@ export const toolProvider: Provider = {
       return [action(c.id, 'uninstall', `remove ${c.name}`, async () => {
         const p = spec.packages;
         const pm = h.pkgManager;
-        if (p.npm) await ctx.run(['npm', 'uninstall', '-g', ...split(p.npm).map((pkg) => pkg.replace(/@[^@/]+$/, ''))], { allowFailure: true });
-        else if (p.uvTool) await ctx.run(['uv', 'tool', 'uninstall', p.uvTool], { allowFailure: true });
-        else if (pm === 'apt' && p.apt) { const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...split(p.apt)]); if (cmd) await ctx.run(cmd, { allowFailure: true }); }
-        else if (pm === 'brew' && p.brew) await ctx.run(['brew', 'uninstall', ...split(p.brew)], { allowFailure: true });
-        else if (pm === 'winget' && p.winget) await ctx.run(['winget', 'uninstall', '--id', p.winget, '--silent'], { allowFailure: true });
-        else return ok(`${c.name}: no uninstall route for ${pm ?? 'this host'}; remove it manually`, false);
-        return ok(`${c.name} removed`);
+        if (p.npm) { await ctx.run(['npm', 'uninstall', '-g', ...split(p.npm).map((pkg) => pkg.replace(/@[^@/]+$/, ''))], { allowFailure: true }); return ok(`${c.name} removed`); }
+        if (p.uvTool) { await ctx.run(['uv', 'tool', 'uninstall', p.uvTool], { allowFailure: true }); return ok(`${c.name} removed`); }
+        if (p.go) {
+          const gopath = (await ctx.run(['go', 'env', 'GOPATH'], { readOnly: true, allowFailure: true })).stdout.trim();
+          if (gopath) {
+            const binary = p.go.replace(/@.*$/, '').split('/').filter(Boolean).pop() + (h.platform === 'windows' ? '.exe' : '');
+            if (!ctx.dryRun) await rm(join(gopath, 'bin', binary), { force: true });
+            return ok(`${c.name} removed`);
+          }
+        }
+        if (pm === 'apt' && p.apt) { const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...split(p.apt)]); if (cmd) { await ctx.run(cmd, { allowFailure: true }); return ok(`${c.name} removed`); } }
+        else if (pm === 'brew' && p.brew) { await ctx.run(['brew', 'uninstall', ...split(p.brew)], { allowFailure: true }); return ok(`${c.name} removed`); }
+        else if (pm === 'winget' && p.winget) { await ctx.run(['winget', 'uninstall', '--id', p.winget, '--silent'], { allowFailure: true }); return ok(`${c.name} removed`); }
+        return ok(`${c.name}: no uninstall route for ${pm ?? 'this host'}; remove it manually`, false);
       })];
     }
 
