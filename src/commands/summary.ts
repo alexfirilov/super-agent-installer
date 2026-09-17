@@ -49,13 +49,16 @@ export async function promptSecrets(ctx: Ctx, components: Component[], o: { ui?:
     ctx.secrets.set(s.env, value); ctx.env[s.env] = value;
   }
 }
+/** Every remaining `postInstallHint` (and the two hardcoded notes below) is advisory: something we could not turn
+ * into an action (a slash command run inside the agent, a trust prompt, a reminder to restart a running session) --
+ * never a shell command we could have run for the user. Sign-in itself is no longer hinted here: `ensureAuth` runs
+ * it as part of the install (see `runInstall`), and its own failure is logged as a warning at the time, not queued
+ * up as a leftover "next step". */
 export function postInstallHints(ctx: Ctx, components: Component[], records: StepRecord[]): string[] {
   const hints: string[] = [];
-  for (const c of components) if (c.postInstallHint && records.some((r) => r.componentId === c.id && r.ok && r.changed)) hints.push(`${c.id}: ${c.postInstallHint}`);
-  if (records.some((r) => r.componentId === 'claude-code' && r.ok && r.changed)) hints.push('claude-code: run `claude` once to log in (or `claude setup-token` for headless hosts)');
-  if (records.some((r) => r.componentId === 'codex-cli' && r.ok && r.changed)) hints.push('codex-cli: run `codex login` (or `codex login --device-auth` on headless hosts)');
-  if (records.some((r) => /^hook-caveman-codex/.test(r.componentId) && r.ok && r.changed)) hints.push('codex: open Codex and run /hooks to trust the new hooks');
-  if (ctx.host.claudeRunning) hints.push('restart running Claude Code sessions to pick up plugin and settings changes');
+  for (const c of components) if (c.postInstallHint && records.some((r) => r.componentId === c.id && r.ok && r.changed)) hints.push(`${c.id}: advisory: ${c.postInstallHint}`);
+  if (records.some((r) => /^hook-caveman-codex/.test(r.componentId) && r.ok && r.changed)) hints.push('codex: advisory: open Codex and run /hooks to trust the new hooks');
+  if (ctx.host.claudeRunning) hints.push('advisory: restart running Claude Code sessions to pick up plugin and settings changes');
   const persisted = ctx.secretsPersist?.persisted ?? [];
   if (persisted.length) hints.push(`persisted to your user environment: ${persisted.join(', ')} (open a new terminal for other apps to see them)`);
   hints.push(...secretExportHints(ctx, components));

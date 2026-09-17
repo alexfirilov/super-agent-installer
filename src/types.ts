@@ -14,7 +14,7 @@ export type Channel = 'latest' | 'stable';
 export interface AgentSpec { kind: 'agent'; agent: 'claude' | 'codex' }
 export interface ClaudePluginSpec { kind: 'claude-plugin'; marketplace: string; marketplaceSource?: string; plugin: string; action?: 'install' | 'disable' | 'uninstall' }
 export interface CodexPluginSpec { kind: 'codex-plugin'; marketplace: string; marketplaceSource: string; plugin: string }
-export interface SkillSpec { kind: 'skill'; repo: string; skills: string[] | '*'; targets: Array<'claude-code' | 'codex'> }
+export interface SkillSpec { kind: 'skill'; repo: string; skills: string[] | '*'; targets: Array<'claude-code' | 'codex'>; postInstall?: string[][] }
 export interface McpSpec {
   kind: 'mcp'; target: 'claude' | 'codex'; name: string; transport: 'http' | 'stdio';
   url?: string; bearerEnv?: string; command?: string; args?: string[]; env?: Record<string, string>;

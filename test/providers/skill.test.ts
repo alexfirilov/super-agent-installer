@@ -5,7 +5,7 @@ import { skillProvider } from '../../src/providers/skill.js';
 import { SKILLS_CLI } from '../../src/pins.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
-const skill = (id: string, repo: string, skills: string[] | '*', targets: Array<'claude-code' | 'codex'> = ['claude-code', 'codex'], audit?: Component['audit']): Component => ({ id, name: id, kind: 'skill', agents: 'both', platforms: ['linux', 'windows', 'darwin'], description: '', verdict: 'recommended', defaultSelected: true, audit, spec: { kind: 'skill', repo, skills, targets } });
+const skill = (id: string, repo: string, skills: string[] | '*', targets: Array<'claude-code' | 'codex'> = ['claude-code', 'codex'], audit?: Component['audit'], postInstall?: string[][]): Component => ({ id, name: id, kind: 'skill', agents: 'both', platforms: ['linux', 'windows', 'darwin'], description: '', verdict: 'recommended', defaultSelected: true, audit, spec: { kind: 'skill', repo, skills, targets, postInstall } });
 const auditFetch = (level: 'pass' | 'warn' | 'fail') => (async () => new Response(JSON.stringify({ gen: { status: level === 'fail' ? 'fail' : 'pass' }, snyk: { status: level === 'warn' ? 'warn' : 'pass' } }))) as unknown as typeof fetch;
 function withLock(ctx: ReturnType<typeof makeTestCtx>, skills: Record<string, { source: string; skillFolderHash?: string }>) { mkdirSync(join(ctx.host.home, '.agents'), { recursive: true }); writeFileSync(join(ctx.host.home, '.agents', '.skill-lock.json'), JSON.stringify({ version: 3, skills })); }
 describe('skillProvider', () => {
@@ -47,6 +47,31 @@ describe('skillProvider', () => {
     await (await skillProvider.plan(c, ctx, inst, 'uninstall'))[0]!.run(ctx); expect(ctx.calls).toContainEqual(['npx', '-y', `skills@${SKILLS_CLI}`, 'remove', 'x', '-g', '-y']);
   });
   it('skips without node', async () => { const ctx = makeTestCtx({ responses: {} }); expect((await skillProvider.plan(skill('sk', 'a/b', ['x']), ctx, null, 'install'))[0]).toMatchObject({ op: 'skip' }); });
+  it('runs postInstall argv in order after a successful install', async () => {
+    const cmd = `npx -y skills@${SKILLS_CLI} add a/b --skill x -g -a claude-code -a codex -y`;
+    const ctx = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
+    const c = skill('sk-pi', 'a/b', ['x'], ['claude-code', 'codex'], undefined, [['npm', 'install', '-g', 'agent-browser'], ['agent-browser', 'install']]);
+    const r = await (await skillProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['npm', 'install', '-g', 'agent-browser']);
+    expect(ctx.calls).toContainEqual(['agent-browser', 'install']);
+    // ran in order, after the skills add
+    const idxAdd = ctx.calls.findIndex((a) => a.join(' ') === cmd);
+    const idxNpm = ctx.calls.findIndex((a) => a.join(' ') === 'npm install -g agent-browser');
+    const idxBrowser = ctx.calls.findIndex((a) => a.join(' ') === 'agent-browser install');
+    expect(idxAdd).toBeLessThan(idxNpm);
+    expect(idxNpm).toBeLessThan(idxBrowser);
+  });
+  it('fails the action when a postInstall command exits non-zero, and does not run the ones after it', async () => {
+    const cmd = `npx -y skills@${SKILLS_CLI} add a/b --skill x -g -a claude-code -a codex -y`;
+    const ctx = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed', 'npm install -g agent-browser': { code: 1, stderr: 'boom' } } });
+    const c = skill('sk-pf', 'a/b', ['x'], ['claude-code', 'codex'], undefined, [['npm', 'install', '-g', 'agent-browser'], ['agent-browser', 'install']]);
+    const r = await (await skillProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/post-install command failed/);
+    expect(r.message).toMatch(/boom/);
+    expect(ctx.calls).not.toContainEqual(['agent-browser', 'install']);
+  });
   it('skips the audit fetch entirely when ctx.noAudit is true', async () => {
     let fetchCalled = false;
     const fetchSpy = (async () => { fetchCalled = true; return new Response(JSON.stringify({ gen: { status: 'fail' } })); }) as unknown as typeof fetch;

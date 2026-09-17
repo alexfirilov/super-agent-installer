@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { postInstallHints, secretExportHints, promptSecrets, type SecretsUi } from '../../src/commands/summary.js';
 import { makeTestCtx } from '../helpers/ctx.js';
-import type { Component } from '../../src/types.js';
+import type { Component, StepRecord } from '../../src/types.js';
 const comp = (id: string, secrets: Component['secrets']): Component => ({ id, name: id, kind: 'mcp', agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: true, secrets, spec: { kind: 'mcp', target: 'claude', name: id, transport: 'http', url: 'https://x' } });
 describe('secretExportHints', () => {
   const comps = [comp('a', [{ env: 'A_KEY', prompt: 'A key', required: true }]), comp('b', [{ env: 'B_KEY', prompt: 'B key', required: false }, { env: 'A_KEY', prompt: 'dup', required: false }]), comp('c', [{ env: 'C_KEY', prompt: 'C key', required: true }])];
@@ -33,6 +33,29 @@ describe('secretExportHints', () => {
     expect(hints.some((h) => /^export A_KEY=<value>/.test(h))).toBe(false);
     expect(hints.some((h) => /^export C_KEY=<value>/.test(h))).toBe(false);
     expect(hints.some((h) => /^export B_KEY=<value>.*disk full/.test(h))).toBe(true);
+  });
+});
+
+describe('postInstallHints advisory labeling', () => {
+  const rec = (componentId: string): StepRecord => ({ componentId, op: 'install', ok: true, changed: true, message: 'installed' });
+  it('labels a remaining manifest postInstallHint as advisory (nothing left that could have been an action)', () => {
+    const ctx = makeTestCtx();
+    const c: Component = { id: 'cp-claude-hud', name: 'claude-hud', kind: 'claude-plugin', agents: 'claude', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: false, postInstallHint: 'In Claude Code run /claude-hud:setup', spec: { kind: 'claude-plugin', marketplace: 'claude-hud', plugin: 'claude-hud' } };
+    const hints = postInstallHints(ctx, [c], [rec('cp-claude-hud')]);
+    expect(hints).toEqual(['cp-claude-hud: advisory: In Claude Code run /claude-hud:setup']);
+  });
+  it('labels the codex /hooks trust note and the restart-sessions note as advisory', () => {
+    const ctx = makeTestCtx({ host: { claudeRunning: true } });
+    const hints = postInstallHints(ctx, [], [rec('hook-caveman-codex')]);
+    expect(hints).toContain('codex: advisory: open Codex and run /hooks to trust the new hooks');
+    expect(hints).toContain('advisory: restart running Claude Code sessions to pick up plugin and settings changes');
+  });
+  it('no longer nags to run `claude`/`codex login` -- ensureAuth already signs the agents in during the run', () => {
+    const ctx = makeTestCtx();
+    const hints = postInstallHints(ctx, [], [rec('claude-code'), rec('codex-cli')]);
+    expect(hints.some((h) => /run `claude`/.test(h))).toBe(false);
+    expect(hints.some((h) => /run `codex`/.test(h))).toBe(false);
+    expect(hints).toEqual([]);
   });
 });
 
