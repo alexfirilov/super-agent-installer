@@ -84,6 +84,21 @@ describe('toolProvider', () => {
     expect(r.ok).toBe(true);
     expect(ctx.calls).toContainEqual(['winget', 'uninstall', '--id', 'jqlang.jq', '--silent']);
   });
+  it('reports an apt update that could not move the version as unchanged, naming the distro ceiling (found by real-host apply: jq 1.8.1 and gh 2.46.0 are the apt candidates)', async () => {
+    const c = tool('jq', { probe: ['jq', '--version'], versionRegex: 'jq-(\\d+\\.\\d+(?:\\.\\d+)?)', packages: { apt: 'jq' }, latest: { github: 'jqlang/jq' } });
+    const ctx = makeTestCtx({ fetch: (async () => new Response('', { status: 302, headers: { location: 'https://github.com/jqlang/jq/releases/tag/jq-1.8.2' } })) as unknown as typeof fetch, responses: { 'jq --version': 'jq-1.8.1', 'sudo -n apt-get install -y jq': '', 'sudo -n apt-get update': '' } });
+    const acts = await toolProvider.plan(c, ctx, { version: '1.8.1' }, 'update');
+    const r = await acts[0]!.run(ctx);
+    expect(r).toMatchObject({ ok: true, changed: false });
+    expect(r.message).toMatch(/1\.8\.1/); expect(r.message).toMatch(/1\.8\.2/);
+    expect(r.message).not.toMatch(/\bjq updated\b/);
+  });
+  it('still reports changed when the version actually moves', async () => {
+    const c = tool('jq', { probe: ['jq', '--version'], versionRegex: 'jq-(\\d+\\.\\d+(?:\\.\\d+)?)', packages: { apt: 'jq' }, latest: { github: 'jqlang/jq' } });
+    const ctx = makeTestCtx({ fetch: (async () => new Response('', { status: 302, headers: { location: 'https://github.com/jqlang/jq/releases/tag/jq-1.8.2' } })) as unknown as typeof fetch, responses: { 'jq --version': 'jq-1.8.2', 'sudo -n apt-get install -y jq': '', 'sudo -n apt-get update': '' } });
+    const r = await (await toolProvider.plan(c, ctx, { version: '1.8.1' }, 'update'))[0]!.run(ctx);
+    expect(r).toMatchObject({ ok: true, changed: true }); expect(r.message).toMatch(/updated/);
+  });
   it('go install without an @version appends @latest', async () => {
     const ctx = makeTestCtx();
     const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });

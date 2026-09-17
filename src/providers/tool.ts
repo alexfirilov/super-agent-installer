@@ -166,6 +166,11 @@ export const toolProvider: Provider = {
       else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
       else return fail(`${c.name}: no install route for ${h.platform}/${h.pkgManager ?? 'no package manager'}`);
       await post();
+      // a package manager can only offer what its repo has: re-probe rather than claim an update the distro could not deliver
+      if (op === 'update' && !ctx.dryRun) {
+        const now = await probeVersion(ctx.run, spec.probe, spec.versionRegex);
+        if (now && installed?.version && !isNewer(now, installed.version)) return ok(`${c.name} is already at ${now}, the newest ${h.pkgManager ?? 'packaged'} version on this host${latest ? ` (upstream has ${latest}; install it manually if you need it)` : ''}`, false);
+      }
       return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'}`);
     }, { from: installed?.version ?? null, to: latest })];
   },
