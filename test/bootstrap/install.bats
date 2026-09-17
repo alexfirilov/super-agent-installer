@@ -13,7 +13,7 @@ while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift;; -*) ;; *) url="$1";; e
 src="${url#file://}"; [ -f "$src" ] || exit 22; cp "$src" "$out"
 EOF
   chmod +x "$TMP/fakebin/curl"; export PATH="$TMP/fakebin:$PATH"
-  export UNAME_S=Linux UNAME_M=x86_64
+  export SAI_TEST_UNAME_S=Linux SAI_TEST_UNAME_M=x86_64
 }
 @test "downloads, verifies, installs and execs the binary" {
   run bash "$BATS_TEST_DIRNAME/../../install.sh" --profile minimal --yes
@@ -33,4 +33,17 @@ EOF
   touch "$HOME/.bashrc"
   bash "$BATS_TEST_DIRNAME/../../install.sh" --no-run >/dev/null; bash "$BATS_TEST_DIRNAME/../../install.sh" --no-run >/dev/null
   [ "$(grep -c 'super-agent-installer' "$HOME/.bashrc")" -eq 2 ]
+}
+@test "does not leak the temp download dir on a normal run" {
+  export TMPDIR="$TMP/tmpdir"; mkdir -p "$TMPDIR"
+  run bash "$BATS_TEST_DIRNAME/../../install.sh" --profile minimal --yes
+  [ "$status" -eq 0 ]
+  [ -z "$(ls -A "$TMPDIR")" ]
+}
+@test "handles CRLF line endings in SHA256SUMS" {
+  sha_line="$(cat "$TMP/release/SHA256SUMS")"
+  printf '%s\r\n' "$sha_line" > "$TMP/release/SHA256SUMS"
+  run bash "$BATS_TEST_DIRNAME/../../install.sh" --no-run
+  [ "$status" -eq 0 ]
+  [ -x "$SAI_INSTALL_DIR/super-agent-installer" ]
 }

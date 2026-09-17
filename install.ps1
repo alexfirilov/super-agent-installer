@@ -5,7 +5,7 @@
 #>
 [CmdletBinding()]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', 'node', Justification = 'node is an optional external tool used only for the npx fallback; its presence is checked at runtime via Get-Command, not a PowerShell command needing version-compatibility validation.')]
-param([switch]$NoRun, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+param([switch]$NoRun, [Parameter(ValueFromRemainingArguments = $true)][string[]]$RestArgs)
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -17,7 +17,7 @@ $base = if ($env:SAI_BASE_URL) { $env:SAI_BASE_URL } else { "https://github.com/
 $installDir = if ($env:SAI_INSTALL_DIR) { $env:SAI_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'super-agent-installer\bin' }
 
 function Say([string]$m) { Write-Host "super-agent-installer: $m" }
-function Fail([string]$m) { Write-Error "super-agent-installer: $m"; exit 1 }
+function Fail([string]$m) { Write-Host "super-agent-installer: $m"; exit 1 }
 
 $archRaw = if ($env:SAI_TEST_ARCH) { $env:SAI_TEST_ARCH } else { $env:PROCESSOR_ARCHITECTURE }
 $arch = switch ($archRaw) { 'AMD64' { 'x64' } 'ARM64' { 'arm64' } default { Fail "unsupported architecture: $archRaw" } }
@@ -38,7 +38,7 @@ try {
     $node = Get-Command node -ErrorAction SilentlyContinue
     if ($node) {
       $major = [int]((& node -p 'process.versions.node.split(".")[0]'))
-      if ($major -ge 22) { Say 'binary download failed; falling back to npx'; & npx --yes "super-agent-installer@$version" @Args; exit $LASTEXITCODE }
+      if ($major -ge 22) { Say 'binary download failed; falling back to npx'; & npx --yes "super-agent-installer@$version" @RestArgs; exit $LASTEXITCODE }
     }
     Fail "download failed: $($_.Exception.Message)"
   }
@@ -51,7 +51,8 @@ try {
 
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   $exe = Join-Path $installDir 'super-agent-installer.exe'
-  Move-Item -Path (Join-Path $tmp $asset) -Destination $exe -Force
+  try { Move-Item -Path (Join-Path $tmp $asset) -Destination $exe -Force }
+  catch { Fail "cannot replace $exe (is super-agent-installer running?): $($_.Exception.Message)" }
 
   if (-not $env:SAI_TEST_NO_PATH) {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -65,7 +66,7 @@ try {
 
   Say "installed to $exe"
   if ($NoRun) { exit 0 }
-  & $exe @Args
+  & $exe @RestArgs
   exit $LASTEXITCODE
 }
 finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }

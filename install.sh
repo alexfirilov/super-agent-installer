@@ -19,9 +19,9 @@ if [ -n "${SUDO_USER:-}" ] && [ "${SAI_ALLOW_SUDO:-0}" != "1" ]; then
   die "do not run with sudo (it would install into root's home). Run as your user, or as plain root on servers. Set SAI_ALLOW_SUDO=1 to override."
 fi
 
-# UNAME_S/UNAME_M let tests pin the detected platform without mocking uname(1).
-os="${UNAME_S:-}"; [ -n "$os" ] || os="$(uname -s)"
-arch="${UNAME_M:-}"; [ -n "$arch" ] || arch="$(uname -m)"
+# SAI_TEST_UNAME_S/SAI_TEST_UNAME_M let tests pin the detected platform without mocking uname(1).
+os="${SAI_TEST_UNAME_S:-}"; [ -n "$os" ] || os="$(uname -s)"
+arch="${SAI_TEST_UNAME_M:-}"; [ -n "$arch" ] || arch="$(uname -m)"
 
 case "$os" in
   Linux) plat=linux ;;
@@ -36,7 +36,7 @@ case "$arch" in
 esac
 
 target="${plat}-${a}"
-if [ "$plat" = linux ] && [ -z "${UNAME_S:-}" ] && ldd --version 2>&1 | grep -qi musl; then
+if [ "$plat" = linux ] && [ -z "${SAI_TEST_UNAME_S:-}" ] && ldd --version 2>&1 | grep -qi musl; then
   target="${target}-musl"
 fi
 
@@ -70,12 +70,14 @@ say "downloading ${asset} v${SAI_VERSION}"
 if ! fetch "${SAI_BASE_URL}/${asset}" "$tmp/$asset" || ! fetch "${SAI_BASE_URL}/SHA256SUMS" "$tmp/SHA256SUMS"; then
   if need node && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 22 ]; then
     say "binary download failed; falling back to npx"
+    rm -rf "$tmp"
     exec npx --yes "super-agent-installer@${SAI_VERSION}" "$@"
   fi
   die "download failed for ${SAI_BASE_URL}/${asset}"
 fi
 
-expected="$(grep " ${asset}\$" "$tmp/SHA256SUMS" | awk '{print $1}')"
+# strip CR so SHA256SUMS files with CRLF line endings (e.g. produced on Windows) still match.
+expected="$(tr -d '\r' < "$tmp/SHA256SUMS" | grep " ${asset}\$" | awk '{print $1}')"
 [ -n "$expected" ] || die "no checksum for ${asset} in SHA256SUMS"
 
 if need sha256sum; then
@@ -103,4 +105,5 @@ esac
 
 say "installed to ${SAI_INSTALL_DIR}/super-agent-installer"
 [ "$NO_RUN" = 1 ] && exit 0
+rm -rf "$tmp"
 exec "$SAI_INSTALL_DIR/super-agent-installer" "$@"
