@@ -1,4 +1,4 @@
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Ctx } from '../types.js';
 import { setMarkerBlock } from '../config/markers.js';
@@ -35,12 +35,39 @@ async function persistWindows(ctx: Ctx, vars: Map<string, string>): Promise<Pers
   return { persisted, failed };
 }
 
+/**
+ * POSIX secrets live in a dedicated file we own (`<stateDir>/secrets.env`, `stateDir` already resolves to
+ * `${XDG_CONFIG_HOME:-$HOME/.config}/super-agent-installer`), never in `~/.profile`/`~/.zshrc`. Those rc files are
+ * shared with the user's own content and commonly mode 644 (world-readable); `writeTextAtomic` only applies a
+ * requested mode to a brand-new file and otherwise preserves whatever mode the file already had, so writing a
+ * secret into an existing 644 rc file would leave it world-readable. Instead we chmod the secrets file to 0600
+ * explicitly after every write (never trusting "it was already 0600") and verify it stuck before reporting
+ * success; the rc files only ever receive a guarded `. "<path>"` source line, so no secret value reaches them and
+ * their own mode is left exactly as it was.
+ */
+async function writeSecretsFile(ctx: Ctx, block: string): Promise<string> {
+  const secretsPath = join(ctx.paths.stateDir, 'secrets.env');
+  await writeTextAtomic(secretsPath, setMarkerBlock(await readIfExists(secretsPath), block, 'hash'), { mode: 0o600 });
+  await chmod(secretsPath, 0o600);
+  const mode = (await stat(secretsPath)).mode & 0o777;
+  if (mode !== 0o600) throw new Error(`could not enforce 0600 permissions on ${secretsPath} (mode is ${mode.toString(8)})`);
+  return secretsPath;
+}
+
 async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<PersistResult> {
   const names = [...vars.keys()];
   const block = names.map((name) => `export ${name}=${shellSingleQuote(vars.get(name) as string)}`).join('\n');
+  let secretsPath: string;
+  try {
+    secretsPath = await writeSecretsFile(ctx, block);
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    return { persisted: [], failed: names.map((name) => ({ name, reason })) };
+  }
+  const sourceLine = `[ -f "${secretsPath}" ] && . "${secretsPath}"`;
   const profilePath = join(ctx.host.home, '.profile');
   try {
-    await writeTextAtomic(profilePath, setMarkerBlock(await readIfExists(profilePath), block, 'hash'), { mode: 0o600 });
+    await writeTextAtomic(profilePath, setMarkerBlock(await readIfExists(profilePath), sourceLine, 'hash'));
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
     return { persisted: [], failed: names.map((name) => ({ name, reason })) };
@@ -48,7 +75,7 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
   const zshrcPath = join(ctx.host.home, '.zshrc');
   if (await fileExists(zshrcPath)) {
     try {
-      await writeTextAtomic(zshrcPath, setMarkerBlock(await readIfExists(zshrcPath), block, 'hash'), { mode: 0o600 });
+      await writeTextAtomic(zshrcPath, setMarkerBlock(await readIfExists(zshrcPath), sourceLine, 'hash'));
     } catch (e) {
       ctx.log.warn(`could not update ~/.zshrc: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -59,9 +86,9 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
 
 /** Writes every entry of `vars` to the OS user environment: `[Environment]::SetEnvironmentVariable(name, value, 'User')`
  * via a per-variable PowerShell child on Windows (the value travels through the child's environment, never argv, so
- * it never appears in a command line, a log line or a process listing), or one marked block of `export NAME='value'`
- * in `~/.profile` (and `~/.zshrc` when it already exists) on POSIX. Never runs under `--dry-run`; logs variable
- * names only, never values. */
+ * it never appears in a command line, a log line or a process listing), or a 0600 `<stateDir>/secrets.env` file plus
+ * a guarded source line in `~/.profile` (and `~/.zshrc` when it already exists) on POSIX -- the value itself never
+ * enters either rc file. Never runs under `--dry-run`; logs variable names only, never values. */
 export async function persistSecrets(ctx: Ctx, vars: Map<string, string>): Promise<PersistResult> {
   if (ctx.dryRun || !vars.size) return { persisted: [], failed: [] };
   return ctx.host.platform === 'windows' ? persistWindows(ctx, vars) : persistPosix(ctx, vars);

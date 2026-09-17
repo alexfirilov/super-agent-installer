@@ -127,7 +127,10 @@ describe('runInstall secret persistence wiring', () => {
     const ctx = makeTestCtx({ manifest, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
     await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
     expect(ctx.secretsPersist?.persisted).toEqual(['CLAUDE_CODE_OAUTH_TOKEN']);
-    expect(readFileSync(join(ctx.host.home, '.profile'), 'utf8')).toContain("export CLAUDE_CODE_OAUTH_TOKEN='captured-token'");
+    expect(readFileSync(join(ctx.paths.stateDir, 'secrets.env'), 'utf8')).toContain("export CLAUDE_CODE_OAUTH_TOKEN='captured-token'");
+    const profileText = readFileSync(join(ctx.host.home, '.profile'), 'utf8');
+    expect(profileText).not.toContain('captured-token');
+    expect(profileText).toContain(join(ctx.paths.stateDir, 'secrets.env'));
   });
   it('--no-persist-secrets skips persistence entirely', async () => {
     clearProviders(); registerProvider(fake([]));
