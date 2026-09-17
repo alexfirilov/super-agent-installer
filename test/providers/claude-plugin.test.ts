@@ -58,4 +58,22 @@ describe('claudePluginProvider', () => {
     const afterUninstall = await claudePluginProvider.detect(u, ctx);
     expect(afterUninstall).toBeNull();
   });
+  it('re-enables an installed but disabled plugin on install mode without updating', async () => {
+    const ctx = ctxWith(['claude-plugins-official'], [{ id: 'superpowers@claude-plugins-official', version: '6.3.0', scope: 'user', enabled: false }], { 'claude plugin enable superpowers@claude-plugins-official': '' });
+    const c = plugin('superpowers'); const inst = await claudePluginProvider.detect(c, ctx);
+    const acts = await claudePluginProvider.plan(c, ctx, inst, 'install');
+    expect(acts).toHaveLength(1); expect(acts[0]).toMatchObject({ op: 'configure' });
+    expect(acts.some((a) => a.op === 'update')).toBe(false);
+    await acts[0]!.run(ctx);
+    expect(ctx.calls).toContainEqual(['claude', 'plugin', 'enable', 'superpowers@claude-plugins-official']);
+  });
+  it('auto-sources the official marketplace when only a third-party marketplace is known', async () => {
+    const ctx = ctxWith(['caveman'], [], { 'claude plugin marketplace add anthropics/claude-plugins-official': '', 'claude plugin install superpowers@claude-plugins-official --scope user --json': '{"outcome":"ok"}' });
+    const c = plugin('superpowers');
+    const r = await (await claudePluginProvider.plan(c, ctx, await claudePluginProvider.detect(c, ctx), 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    const addIdx = ctx.calls.findIndex((a) => a.join(' ') === 'claude plugin marketplace add anthropics/claude-plugins-official');
+    const installIdx = ctx.calls.findIndex((a) => a.join(' ') === 'claude plugin install superpowers@claude-plugins-official --scope user --json');
+    expect(addIdx).toBeGreaterThanOrEqual(0); expect(installIdx).toBeGreaterThan(addIdx);
+  });
 });

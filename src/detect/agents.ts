@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import type { Ctx } from '../types.js';
 import { probeVersion } from './tools.js';
+import { lastJsonLine } from '../exec/json-output.js';
 export interface ClaudeState { installed: boolean; version: string | null; plugins: Array<{ id: string; version: string; scope: string; enabled: boolean }>; marketplaces: string[]; mcp: Record<string, unknown>; settings: Record<string, unknown> }
 export interface CodexState { installed: boolean; version: string | null; plugins: Array<{ id: string; version: string | null }>; marketplaces: string[]; mcp: Record<string, Record<string, unknown>>; config: Record<string, unknown> }
 async function readJson(p: string): Promise<Record<string, unknown>> { try { return JSON.parse(await readFile(p, 'utf8')) as Record<string, unknown>; } catch { return {}; } }
-function lastJsonLine(s: string): unknown { const lines = s.trim().split('\n').filter((l) => l.trim().startsWith('{') || l.trim().startsWith('[')); const last = lines.pop(); if (!last) return null; try { return JSON.parse(last); } catch { return null; } }
 export async function detectClaude(ctx: Ctx): Promise<ClaudeState> {
   const version = await probeVersion(ctx.run, ['claude', '--version']);
   const settings = await readJson(ctx.paths.claudeSettings);

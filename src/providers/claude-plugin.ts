@@ -2,6 +2,7 @@ import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
 import { detectClaude, type ClaudeState } from '../detect/agents.js';
 import { OFFICIAL_MARKETPLACE, OFFICIAL_MARKETPLACE_SOURCE } from '../pins.js';
 import { action, ok, fail, skipAction } from './types.js';
+import { lastJsonLine } from '../exec/json-output.js';
 const stateCache = new WeakMap<Ctx, Promise<ClaudeState>>();
 export function getClaudeState(ctx: Ctx): Promise<ClaudeState> { let p = stateCache.get(ctx); if (!p) { p = detectClaude(ctx); stateCache.set(ctx, p); } return p; }
 export function invalidateClaudeState(ctx: Ctx): void { stateCache.delete(ctx); }
@@ -13,7 +14,7 @@ export async function ensureClaudeMarketplace(ctx: Ctx, name: string, source?: s
   await ctx.run(['claude', 'plugin', 'marketplace', 'add', src], { timeoutMs: 300000 }); st.marketplaces.push(name);
 }
 async function refreshMarketplace(ctx: Ctx, name: string): Promise<void> { let s = updatedMarketplaces.get(ctx); if (!s) { s = new Set(); updatedMarketplaces.set(ctx, s); } if (s.has(name)) return; s.add(name); await ctx.run(['claude', 'plugin', 'marketplace', 'update', name], { allowFailure: true, timeoutMs: 300000 }); }
-function lastJson(s: string): Record<string, unknown> | null { const l = s.trim().split('\n').reverse().find((x) => x.trim().startsWith('{')); if (!l) return null; try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } }
+function asJsonObject(v: unknown): Record<string, unknown> | null { return v && typeof v === 'object' ? (v as Record<string, unknown>) : null; }
 export const claudePluginProvider: Provider = {
   kind: 'claude-plugin',
   async detect(c, ctx) {
@@ -40,7 +41,7 @@ export const claudePluginProvider: Provider = {
     if (!installed) return [action(c.id, 'install', `install ${id}`, async () => {
       await ensureClaudeMarketplace(ctx, spec.marketplace, spec.marketplaceSource);
       const r = await ctx.run(['claude', 'plugin', 'install', id, '--scope', 'user', '--json'], { allowFailure: true, timeoutMs: 600000 });
-      const j = lastJson(r.stdout); if (r.code !== 0 && j?.outcome !== 'ok') return fail(`install ${id} failed: ${(j?.message as string) ?? r.stderr.trim()}`);
+      const j = asJsonObject(lastJsonLine(r.stdout)); if (r.code !== 0 && j?.outcome !== 'ok') return fail(`install ${id} failed: ${(j?.message as string) ?? r.stderr.trim()}`);
       const existing = st.plugins.find((p) => p.id === id && p.scope === 'user');
       if (existing) existing.enabled = true; else st.plugins.push({ id, version: (j?.version as string) ?? '', scope: 'user', enabled: true });
       return ok(`${id} installed`);
@@ -53,7 +54,7 @@ export const claudePluginProvider: Provider = {
     }));
     if (mode === 'update') acts.push(action(c.id, 'update', `update ${id}`, async () => {
       await refreshMarketplace(ctx, spec.marketplace);
-      const r = await ctx.run(['claude', 'plugin', 'update', id, '--json'], { allowFailure: true, timeoutMs: 600000 }); const j = lastJson(r.stdout);
+      const r = await ctx.run(['claude', 'plugin', 'update', id, '--json'], { allowFailure: true, timeoutMs: 600000 }); const j = asJsonObject(lastJsonLine(r.stdout));
       if (r.code !== 0) return fail(`update ${id} failed: ${(j?.failureCode as string) ?? r.stderr.trim()}`);
       if (j?.updateOutcome === 'up_to_date') return ok(`${id} up to date (${j.newVersion ?? installed.version})`, false);
       const newVersion = (j?.newVersion as string | undefined) ?? installed.version ?? '';

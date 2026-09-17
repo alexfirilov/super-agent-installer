@@ -1,19 +1,20 @@
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
 import { detectCodex, type CodexState } from '../detect/agents.js';
 import { action, ok, fail, skipAction } from './types.js';
+import { lastJsonLine } from '../exec/json-output.js';
 const RESERVED = new Set(['openai-curated', 'openai-curated-remote', 'openai-api-curated']);
 const stateCache = new WeakMap<Ctx, Promise<CodexState>>();
 export function getCodexState(ctx: Ctx): Promise<CodexState> { let p = stateCache.get(ctx); if (!p) { p = detectCodex(ctx); stateCache.set(ctx, p); } return p; }
 export function invalidateCodexState(ctx: Ctx): void { stateCache.delete(ctx); }
 const upgraded = new WeakMap<Ctx, Set<string>>();
-function lastJson(s: string): Record<string, unknown> | null { const l = s.trim().split('\n').reverse().find((x) => x.trim().startsWith('{')); if (!l) return null; try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } }
+function asJsonObject(v: unknown): Record<string, unknown> | null { return v && typeof v === 'object' ? (v as Record<string, unknown>) : null; }
 export async function ensureCodexMarketplace(ctx: Ctx, name: string, source: string): Promise<void> {
   if (RESERVED.has(name)) return; const st = await getCodexState(ctx); if (st.marketplaces.includes(name)) return;
   await ctx.run(['codex', 'plugin', 'marketplace', 'add', source, '--json'], { timeoutMs: 300000 }); st.marketplaces.push(name);
 }
 async function upgradeMarketplace(ctx: Ctx, name: string): Promise<void> { if (RESERVED.has(name)) return; let s = upgraded.get(ctx); if (!s) { s = new Set(); upgraded.set(ctx, s); } if (s.has(name)) return; s.add(name); await ctx.run(['codex', 'plugin', 'marketplace', 'upgrade', name, '--json'], { allowFailure: true, timeoutMs: 300000 }); }
 async function add(ctx: Ctx, id: string): Promise<{ ok: boolean; version: string | null; error: string }> {
-  const r = await ctx.run(['codex', 'plugin', 'add', id, '--json'], { allowFailure: true, timeoutMs: 600000 }); const j = lastJson(r.stdout);
+  const r = await ctx.run(['codex', 'plugin', 'add', id, '--json'], { allowFailure: true, timeoutMs: 600000 }); const j = asJsonObject(lastJsonLine(r.stdout));
   if (r.code !== 0) return { ok: false, version: null, error: (r.stderr || r.stdout).trim() };
   return { ok: true, version: (j?.version as string) ?? null, error: '' };
 }
