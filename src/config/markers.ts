@@ -32,3 +32,10 @@ export function removeMarkerBlock(text: string, style: MarkerStyle): string {
   const out = [...lines.slice(0, s), ...lines.slice(e + 1)];
   return out.join('\n') + (out.length ? '\n' : '');
 }
+
+/** The text between the markers (without them), or null when there is no block. */
+export function extractMarkerBlock(text: string, style: MarkerStyle): string | null {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const loc = locate(lines, style);
+  return loc ? lines.slice(loc.s + 1, loc.e).join('\n') : null;
+}

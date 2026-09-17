@@ -25,7 +25,8 @@ export const codexPluginProvider: Provider = {
     if (c.spec.kind !== 'codex-plugin') return []; const spec = c.spec; const id = `${spec.plugin}@${spec.marketplace}`;
     const st = await getCodexState(ctx); if (!st.installed) return [skipAction(c.id, 'Codex CLI not installed', 'codex-cli')];
     if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove ${id}`, async () => {
-      await ctx.run(['codex', 'plugin', 'remove', id, '--json'], { allowFailure: true });
+      const r = await ctx.run(['codex', 'plugin', 'remove', id, '--json'], { allowFailure: true });
+      if (r.code !== 0) return fail(`remove ${id} failed: ${(r.stderr || r.stdout).trim()}`);
       st.plugins = st.plugins.filter((p) => p.id !== id);
       return ok(`${id} removed`);
     })] : [];

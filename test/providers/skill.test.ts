@@ -46,4 +46,14 @@ describe('skillProvider', () => {
     expect(r.ok).toBe(true);
     expect(fetchCalled).toBe(false);
   });
+  it('warns when a skills: "*" component has no audit targets, and audits the manifest audit entries when present', async () => {
+    const cmd = `npx -y skills@${SKILLS_CLI} add a/b --skill * -g -a claude-code -a codex -y`;
+    const ctx = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
+    expect((await (await skillProvider.plan(skill('sk-all', 'a/b', '*'), ctx, null, 'install'))[0]!.run(ctx)).ok).toBe(true);
+    expect(ctx.log.lines.some((l) => /audit skipped: no audit targets for a\/b/.test(l))).toBe(true);
+    const urls: string[] = []; const f = (async (u: string) => { urls.push(String(u)); return new Response(JSON.stringify({ gen: { status: 'pass' } })); }) as unknown as typeof fetch;
+    const audited = makeTestCtx({ fetch: f, responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
+    expect((await (await skillProvider.plan(skill('sk-all', 'a/b', '*', ['claude-code', 'codex'], [{ owner: 'a', repo: 'b', skill: 'one' }]), audited, null, 'install'))[0]!.run(audited)).ok).toBe(true);
+    expect(urls.some((u) => /a\/b\/one/.test(u))).toBe(true); expect(audited.log.lines.some((l) => /audit skipped/.test(l))).toBe(false);
+  });
 });

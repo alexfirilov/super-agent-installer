@@ -21,7 +21,8 @@ describe('toolProvider', () => {
     const win = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, responses: { 'winget install --id jqlang.jq --silent --accept-source-agreements --accept-package-agreements': '' } });
     await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq', winget: 'jqlang.jq' } }), win, null, 'install'))[0]!.run(win);
     expect(win.calls[0]?.[0]).toBe('winget');
-    const ctx = makeTestCtx({ responses: { 'npm config get prefix': '/home/u/.local', 'npm install -g @caveman-ai/cli@1.3.4': '', 'caveman --version': '' } });
+    const responses: Record<string, string> = { 'npm install -g @caveman-ai/cli@1.3.4': '', 'caveman --version': '' };
+    const ctx = makeTestCtx({ responses }); responses['npm config get prefix'] = join(ctx.host.home, '.local'); // not created yet, but its parent (home) is writable
     const c = tool('caveman-cli', { probe: ['caveman', '--version'], packages: { npm: '@caveman-ai/cli@1.3.4' }, postInstall: { linux: [['caveman', '--version']] } });
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['npm', 'install', '-g', '@caveman-ai/cli@1.3.4']); expect(ctx.calls).toContainEqual(['caveman', '--version']);
@@ -100,15 +101,30 @@ describe('toolProvider', () => {
     expect(r.ok).toBe(true);
     expect(ctx.calls).toContainEqual(['sh', '-c', 'echo hi']);
   });
-  it('redirects the npm global prefix off /usr for a non-root user', async () => {
-    const ctx = makeTestCtx({ responses: { 'npm config get prefix': '/usr/local', 'npm install -g some-pkg': '' } });
+  it('installs with --prefix ~/.local when the npm global prefix is not writable (no persistent npm config), and plainly when it is (I8)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sai-npm-'));
+    const unwritable = join(dir, 'notadir'); writeFileSync(unwritable, ''); // <prefix>/lib/node_modules cannot exist under a file -> not writable
+    const ctx = makeTestCtx({ responses: { 'npm config get prefix': unwritable } });
     const c = tool('some-tool', { probe: ['some-tool', '--version'], packages: { npm: 'some-pkg' } });
     const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(r.ok).toBe(true);
-    const setIdx = ctx.calls.findIndex((a) => a.join(' ').startsWith('npm config set prefix'));
-    const installIdx = ctx.calls.findIndex((a) => a.join(' ') === 'npm install -g some-pkg');
-    expect(setIdx).toBeGreaterThanOrEqual(0);
-    expect(ctx.calls[setIdx]).toEqual(['npm', 'config', 'set', 'prefix', join(ctx.host.home, '.local')]);
-    expect(installIdx).toBeGreaterThan(setIdx);
+    expect(ctx.calls.some((a) => a.join(' ').startsWith('npm config set'))).toBe(false);
+    expect(ctx.calls).toContainEqual(['npm', 'install', '-g', '--prefix', join(ctx.host.home, '.local'), 'some-pkg']);
+    expect(ctx.log.lines.some((l) => /\.local\/bin/.test(l) && /PATH/.test(l))).toBe(true);
+    const writable = join(dir, 'prefix'); mkdirSync(join(writable, 'lib', 'node_modules'), { recursive: true });
+    const wctx = makeTestCtx({ responses: { 'npm config get prefix': writable } });
+    expect((await (await toolProvider.plan(c, wctx, null, 'install'))[0]!.run(wctx)).ok).toBe(true);
+    expect(wctx.calls).toContainEqual(['npm', 'install', '-g', 'some-pkg']);
+    const missing = join(dir, 'fresh'); mkdirSync(missing); // prefix exists and is writable but lib/node_modules does not exist yet
+    const mctx = makeTestCtx({ responses: { 'npm config get prefix': missing } });
+    await (await toolProvider.plan(c, mctx, null, 'install'))[0]!.run(mctx);
+    expect(mctx.calls).toContainEqual(['npm', 'install', '-g', 'some-pkg']);
+  });
+  it('uninstalls npm packages from the ~/.local prefix too when they live there', async () => {
+    const ctx = makeTestCtx(); mkdirSync(join(ctx.host.home, '.local', 'lib', 'node_modules', '@caveman-ai', 'cli'), { recursive: true });
+    const c = tool('caveman-cli', { probe: ['caveman', '--version'], packages: { npm: '@caveman-ai/cli@1.3.4' } });
+    await (await toolProvider.plan(c, ctx, { version: '1' }, 'uninstall'))[0]!.run(ctx);
+    expect(ctx.calls).toContainEqual(['npm', 'uninstall', '-g', '@caveman-ai/cli']);
+    expect(ctx.calls).toContainEqual(['npm', 'uninstall', '-g', '--prefix', join(ctx.host.home, '.local'), '@caveman-ai/cli']);
   });
 });

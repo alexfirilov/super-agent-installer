@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLogger, table } from '../../src/ui/log.js';
@@ -9,7 +9,11 @@ describe('logger', () => {
     const log = createLogger({ file });
     log.info('hello'); log.warn('careful'); log.debug('hidden');
     expect(log.lines).toEqual(expect.arrayContaining([expect.stringContaining('hello'), expect.stringContaining('careful')]));
-    expect(readFileSync(file, 'utf8')).toContain('hidden');
+    expect(readFileSync(file, 'utf8')).toContain('hello');
+    expect(readFileSync(file, 'utf8')).not.toContain('hidden'); // DEBUG (command lines) reach the file only with --verbose
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
+    const verbose = createLogger({ file: join(dir, 'v.log'), verbose: true }); verbose.debug('shown');
+    expect(readFileSync(join(dir, 'v.log'), 'utf8')).toContain('shown');
   });
   it('renders a table with padded columns', () => {
     const t = table([['a', 'bbb'], ['cc', 'd']], ['H1', 'H2']);

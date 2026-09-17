@@ -1,5 +1,5 @@
-import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, constants, rm, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import type { Action, Component, Ctx, Installed, Provider, ToolSpec } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
 import { latestNpm, latestGithubRelease } from '../version/latest.js';
@@ -35,15 +35,28 @@ function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo
   }
 }
 
+/** Writable if the path exists and is writable, or does not exist yet and its closest existing ancestor is writable (npm creates the missing dirs). */
+async function writableOrCreatable(p: string): Promise<boolean> {
+  try { await stat(p); } catch (e) { const parent = dirname(p); return (e as NodeJS.ErrnoException).code === 'ENOENT' && parent !== p ? writableOrCreatable(parent) : false; }
+  return access(p, constants.W_OK).then(() => true, () => false);
+}
+/** True when `npm install -g` can write into the global prefix (`<prefix>/lib/node_modules`). */
+const npmPrefixWritable = (prefix: string) => writableOrCreatable(join(prefix, 'lib', 'node_modules'));
+async function userPrefix(ctx: Ctx): Promise<string | null> {
+  if (ctx.host.isRoot || ctx.host.platform === 'windows') return null;
+  const prefix = (await ctx.run(['npm', 'config', 'get', 'prefix'], { readOnly: true, allowFailure: true })).stdout.trim();
+  if (!prefix || (await npmPrefixWritable(prefix))) return null;
+  return join(ctx.host.home, '.local');
+}
 async function npmGlobal(ctx: Ctx, pkg: string): Promise<void> {
-  if (!ctx.host.isRoot && ctx.host.platform !== 'windows') {
-    const prefix = (await ctx.run(['npm', 'config', 'get', 'prefix'], { readOnly: true, allowFailure: true })).stdout.trim();
-    if (prefix.startsWith('/usr')) {
-      ctx.log.warn(`npm global prefix ${prefix} is not user-writable; switching to ~/.local (add ~/.local/bin to PATH)`);
-      await ctx.run(['npm', 'config', 'set', 'prefix', join(ctx.host.home, '.local')]);
-    }
-  }
-  await ctx.run(['npm', 'install', '-g', ...split(pkg)], { timeoutMs: 600000 });
+  const prefix = await userPrefix(ctx);
+  if (prefix) ctx.log.warn(`npm global prefix is not writable by you; installing with --prefix ${prefix} (make sure ${join(prefix, 'bin')} is on your PATH)`);
+  await ctx.run(['npm', 'install', '-g', ...(prefix ? ['--prefix', prefix] : []), ...split(pkg)], { timeoutMs: 600000 });
+}
+async function npmUninstall(ctx: Ctx, pkgs: string[]): Promise<void> {
+  await ctx.run(['npm', 'uninstall', '-g', ...pkgs], { allowFailure: true });
+  const local = join(ctx.host.home, '.local');
+  if (ctx.host.platform !== 'windows' && (await Promise.all(pkgs.map((p) => stat(join(local, 'lib', 'node_modules', p)).then(() => true, () => false)))).some(Boolean)) await ctx.run(['npm', 'uninstall', '-g', '--prefix', local, ...pkgs], { allowFailure: true });
 }
 
 async function installNode(ctx: Ctx): Promise<string | null> {
@@ -99,7 +112,7 @@ export const toolProvider: Provider = {
       return [action(c.id, 'uninstall', `remove ${c.name}`, async () => {
         const p = spec.packages;
         const pm = h.pkgManager;
-        if (p.npm) { await ctx.run(['npm', 'uninstall', '-g', ...split(p.npm).map((pkg) => pkg.replace(/@[^@/]+$/, ''))], { allowFailure: true }); return ok(`${c.name} removed`); }
+        if (p.npm) { await npmUninstall(ctx, split(p.npm).map((pkg) => pkg.replace(/@[^@/]+$/, ''))); return ok(`${c.name} removed`); }
         if (p.uvTool) { await ctx.run(['uv', 'tool', 'uninstall', p.uvTool], { allowFailure: true }); return ok(`${c.name} removed`); }
         if (p.go) {
           const gopath = (await ctx.run(['go', 'env', 'GOPATH'], { readOnly: true, allowFailure: true })).stdout.trim();

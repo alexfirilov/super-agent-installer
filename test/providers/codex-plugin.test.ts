@@ -48,4 +48,11 @@ describe('codexPluginProvider', () => {
     const afterUninstall = await codexPluginProvider.detect(c, ctx);
     expect(afterUninstall).toBeNull();
   });
+  it('reports failure when remove exits non-zero and keeps the plugin in the cached state (I7)', async () => {
+    const ctx = ctxWith('[marketplaces.caveman]\n', [{ pluginId: 'caveman@caveman', version: '1' }], { 'codex plugin remove caveman@caveman --json': { code: 1, stderr: 'remove boom' } });
+    const c = plugin('caveman', 'caveman', 'JuliusBrussee/caveman');
+    const r = await (await codexPluginProvider.plan(c, ctx, await codexPluginProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toMatch(/remove boom/);
+    expect((await getCodexState(ctx)).plugins).toHaveLength(1);
+  });
 });

@@ -76,4 +76,13 @@ describe('claudePluginProvider', () => {
     const installIdx = ctx.calls.findIndex((a) => a.join(' ') === 'claude plugin install superpowers@claude-plugins-official --scope user --json');
     expect(addIdx).toBeGreaterThanOrEqual(0); expect(installIdx).toBeGreaterThan(addIdx);
   });
+  it('reports failure when disable or uninstall exit non-zero and leaves the cached state untouched (I7)', async () => {
+    const rows = [{ id: 'plugin-dev@claude-plugins-official', version: '1', scope: 'user', enabled: true }, { id: 'code-review@claude-plugins-official', version: '1', scope: 'user', enabled: true }];
+    const ctx = ctxWith(['claude-plugins-official'], rows, { 'claude plugin disable plugin-dev@claude-plugins-official --scope user': { code: 1, stderr: 'disable boom' }, 'claude plugin uninstall code-review@claude-plugins-official --scope user': { code: 1, stderr: 'uninstall boom' } });
+    const d = plugin('plugin-dev', { action: 'disable' }); const rd = await (await claudePluginProvider.plan(d, ctx, await claudePluginProvider.detect(d, ctx), 'install'))[0]!.run(ctx);
+    expect(rd.ok).toBe(false); expect(rd.message).toMatch(/disable boom/);
+    const u = plugin('code-review', { action: 'uninstall' }); const ru = await (await claudePluginProvider.plan(u, ctx, await claudePluginProvider.detect(u, ctx), 'install'))[0]!.run(ctx);
+    expect(ru.ok).toBe(false); expect(ru.message).toMatch(/uninstall boom/);
+    const st = await getClaudeState(ctx); expect(st.plugins).toHaveLength(2); expect(st.plugins[0]!.enabled).toBe(true);
+  });
 });

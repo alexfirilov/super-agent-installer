@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { selfUpdate } from '../../src/update/self-update.js';
+import { selfUpdate, releaseTarget } from '../../src/update/self-update.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 const bin = Buffer.from('new-binary'); const sha = createHash('sha256').update(bin).digest('hex');
 const f = (latest: string) => (async (url: string | URL, init?: RequestInit) => { const u = String(url); if (u.endsWith('/releases/latest')) return new Response('', { status: 302, headers: { location: `https://github.com/x/y/releases/tag/v${latest}` } }); if (u.endsWith('SHA256SUMS')) return new Response(`${sha}  super-agent-installer-linux-x64\nabc  other\n`); if (u.includes('super-agent-installer-linux-x64')) return new Response(bin); return new Response('nf', { status: 404 }); }) as unknown as typeof fetch;
@@ -26,5 +26,15 @@ describe('selfUpdate', () => {
     const r = await selfUpdate(makeTestCtx(), '0.1.0', { fetch: f('0.2.0'), execPath: exe, platform: 'linux', arch: 'x64', rename });
     expect(r.updated).toBe(false); expect(r.ok).toBe(false); expect(r.message).toMatch(/rename EACCES/);
     expect(existsSync(`${exe}.new`)).toBe(false); expect(readFileSync(exe, 'utf8')).toBe('old');
+  });
+  it('releaseTarget picks the musl asset on musl hosts and selfUpdate wires ctx.host.isMusl', async () => {
+    expect(releaseTarget('linux', 'x64', false)).toEqual({ asset: 'super-agent-installer-linux-x64', exe: 'super-agent-installer-linux-x64' });
+    expect(releaseTarget('linux', 'aarch64', true)).toEqual({ asset: 'super-agent-installer-linux-arm64-musl', exe: 'super-agent-installer-linux-arm64-musl' });
+    expect(releaseTarget('win32', 'x64', true)).toEqual({ asset: 'super-agent-installer-windows-x64', exe: 'super-agent-installer-windows-x64.exe' });
+    const urls: string[] = [];
+    const musl = (async (url: string | URL) => { const u = String(url); urls.push(u); if (u.endsWith('/releases/latest')) return new Response('', { status: 302, headers: { location: 'https://github.com/x/y/releases/tag/v0.2.0' } }); if (u.endsWith('SHA256SUMS')) return new Response(`${sha}  super-agent-installer-linux-x64-musl\n`); return new Response(bin); }) as unknown as typeof fetch;
+    const dir = mkdtempSync(join(tmpdir(), 'sai-')); const exe = join(dir, 'super-agent-installer'); writeFileSync(exe, 'old');
+    const r = await selfUpdate(makeTestCtx({ host: { isMusl: true } }), '0.1.0', { fetch: musl, execPath: exe, platform: 'linux', arch: 'x64' });
+    expect(r.updated).toBe(true); expect(urls.some((u) => u.endsWith('/super-agent-installer-linux-x64-musl'))).toBe(true);
   });
 });

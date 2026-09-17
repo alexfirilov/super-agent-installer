@@ -46,6 +46,7 @@ export const skillProvider: Provider = {
         if (v === 'fail') return fail(`skills.sh audit FAILED for ${spec.repo}: ${results.map((r) => JSON.stringify(r.scanners)).join(' ')}. Rerun with --no-audit to override.`);
         if (v === 'warn') ctx.log.warn(`skills.sh audit warnings for ${spec.repo}: ${results.map((r) => `${r.riskLevel ?? ''} ${JSON.stringify(r.scanners)}`).join(' ')}`);
         if (v === 'unknown' && targets.length) ctx.log.warn(`skills.sh audit unavailable for ${spec.repo}`);
+        if (!targets.length) ctx.log.warn(`audit skipped: no audit targets for ${spec.repo}`);
       }
       const argv = npx('add', spec.repo, ...(named ? named.flatMap((s) => ['--skill', s]) : ['--skill', '*']), '-g', ...spec.targets.flatMap((t) => ['-a', t]), '-y');
       if (ctx.host.platform === 'windows' && ctx.host.windowsDeveloperMode === false) argv.push('--copy');

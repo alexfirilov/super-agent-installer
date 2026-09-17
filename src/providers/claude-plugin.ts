@@ -28,13 +28,18 @@ export const claudePluginProvider: Provider = {
     const scopes = (installed?.details?.scopes as string[] | undefined) ?? ['user']; const enabled = (installed?.details?.enabled as boolean | undefined) ?? true;
     const act = spec.action ?? 'install';
     const uninstallAll = async () => {
-      for (const s of scopes) await ctx.run(['claude', 'plugin', 'uninstall', id, '--scope', s], { allowFailure: true, timeoutMs: 300000 });
-      st.plugins = st.plugins.filter((p) => p.id !== id);
+      const failures: string[] = [];
+      for (const s of scopes) {
+        const r = await ctx.run(['claude', 'plugin', 'uninstall', id, '--scope', s], { allowFailure: true, timeoutMs: 300000 });
+        if (r.code !== 0) failures.push(`${s}: ${(r.stderr || r.stdout).trim()}`); else st.plugins = st.plugins.filter((p) => !(p.id === id && p.scope === s));
+      }
+      if (failures.length) return fail(`uninstall ${id} failed (${failures.join('; ')})`);
       return ok(`${id} uninstalled (${scopes.join(', ')})`);
     };
     if (act === 'uninstall' || mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `uninstall ${id}`, uninstallAll)] : [];
     if (act === 'disable') return installed && enabled ? [action(c.id, 'disable', `disable ${id} at user scope`, async () => {
-      await ctx.run(['claude', 'plugin', 'disable', id, '--scope', 'user'], { allowFailure: true });
+      const r = await ctx.run(['claude', 'plugin', 'disable', id, '--scope', 'user'], { allowFailure: true });
+      if (r.code !== 0) return fail(`disable ${id} failed: ${(r.stderr || r.stdout).trim()}`);
       for (const p of st.plugins) if (p.id === id && p.scope === 'user') p.enabled = false;
       return ok(`${id} disabled`);
     })] : [];
@@ -48,7 +53,8 @@ export const claudePluginProvider: Provider = {
     })];
     const acts: Action[] = [];
     if (!enabled) acts.push(action(c.id, 'configure', `enable ${id}`, async () => {
-      await ctx.run(['claude', 'plugin', 'enable', id], { allowFailure: true });
+      const r = await ctx.run(['claude', 'plugin', 'enable', id], { allowFailure: true });
+      if (r.code !== 0) return fail(`enable ${id} failed: ${(r.stderr || r.stdout).trim()}`);
       for (const p of st.plugins) if (p.id === id) p.enabled = true;
       return ok(`${id} enabled`);
     }));

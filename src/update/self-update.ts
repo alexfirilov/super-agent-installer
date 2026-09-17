@@ -5,7 +5,7 @@ import { REPO } from '../pins.js';
 import { latestGithubRelease } from '../version/latest.js';
 import { isNewer } from '../version/compare.js';
 export interface SelfUpdateDeps { fetch?: typeof fetch; execPath?: string; platform?: string; arch?: string; writeFile?: typeof writeFile; rename?: typeof rename; chmod?: typeof chmod; unlink?: typeof unlink }
-export function releaseTarget(platform: string, arch: string): { asset: string; exe: string } { const os = platform === 'win32' || platform === 'windows' ? 'windows' : platform === 'darwin' ? 'darwin' : 'linux'; const a = arch === 'arm64' || arch === 'aarch64' ? 'arm64' : 'x64'; const asset = `super-agent-installer-${os}-${a}`; return { asset, exe: os === 'windows' ? `${asset}.exe` : asset }; }
+export function releaseTarget(platform: string, arch: string, isMusl = false): { asset: string; exe: string } { const os = platform === 'win32' || platform === 'windows' ? 'windows' : platform === 'darwin' ? 'darwin' : 'linux'; const a = arch === 'arm64' || arch === 'aarch64' ? 'arm64' : 'x64'; const asset = `super-agent-installer-${os}-${a}${os === 'linux' && isMusl ? '-musl' : ''}`; return { asset, exe: os === 'windows' ? `${asset}.exe` : asset }; }
 export async function selfUpdate(ctx: Ctx, current: string, d: SelfUpdateDeps = {}): Promise<{ updated: boolean; ok: boolean; message: string }> {
   const f = d.fetch ?? ctx.fetch; const execPath = d.execPath ?? process.execPath; const platform = d.platform ?? process.platform; const arch = d.arch ?? process.arch;
   const w = d.writeFile ?? writeFile; const ren = d.rename ?? rename; const ch = d.chmod ?? chmod; const un = d.unlink ?? unlink;
@@ -13,7 +13,7 @@ export async function selfUpdate(ctx: Ctx, current: string, d: SelfUpdateDeps = 
   const latest = await latestGithubRelease(f, REPO); if (!latest) return { updated: false, ok: false, message: 'could not reach GitHub releases' };
   if (!isNewer(latest, current)) return { updated: false, ok: true, message: `already current (v${current})` };
   if (ctx.dryRun) return { updated: false, ok: true, message: `[dry-run] would update v${current} -> v${latest}` };
-  const { asset, exe } = releaseTarget(platform, arch); const base = `https://github.com/${REPO}/releases/download/v${latest}`;
+  const { asset, exe } = releaseTarget(platform, arch, ctx.host.isMusl); const base = `https://github.com/${REPO}/releases/download/v${latest}`;
   let buf: Buffer;
   try {
     const sums = await (await f(`${base}/SHA256SUMS`)).text(); const line = sums.split('\n').find((l) => l.trim().endsWith(exe) || l.trim().endsWith(asset)); const expected = line?.trim().split(/\s+/)[0];
