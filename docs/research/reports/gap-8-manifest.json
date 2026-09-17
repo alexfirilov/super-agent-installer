@@ -1,0 +1,3274 @@
+{
+  "$schema": "./components.schema.json",
+  "manifestVersion": 1,
+  "generatedAt": "2026-09-17",
+  "budget": {
+    "claudeAlwaysOnTokensDefaultTarget": 6000,
+    "claudeAlwaysOnTokensWarn": 8000,
+    "codexMcpServersMax": 5,
+    "note": "contextCostTokens are Claude Code 2.1.273 `claude plugin details` estimates for claude-opus-4-7 (sonnet ~0.68x); MCP tool schemas and hook-injected additionalContext are NOT included."
+  },
+  "slots": {
+    "statusline": {
+      "max": 1,
+      "default": "plugin:claude-hud",
+      "rule": "settings.json has ONE statusLine object; respect existing owner on update"
+    },
+    "bash-rewriter": {
+      "max": 1,
+      "default": null,
+      "rule": "multiple PreToolUse updatedInput rewriters on Bash are non-deterministic (docs)"
+    },
+    "api-proxy": {
+      "max": 1,
+      "default": null,
+      "rule": "ANTHROPIC_BASE_URL/model_provider rewrites; disables Claude tool search + Remote Control"
+    },
+    "tool-output-compressor": {
+      "max": 1,
+      "default": null,
+      "rule": "context-mode vs caveman proxy vs rtk vs headroom: same layer"
+    },
+    "memory": {
+      "max": 1,
+      "default": null,
+      "rule": "built-in auto memory is on by default; remember/claude-mem/episodic/cavemem all inject at SessionStart"
+    },
+    "memory(codex)": {
+      "max": 1,
+      "default": "setting:codex.memories"
+    },
+    "codex-notify": {
+      "max": 1,
+      "default": "setting:codex.notify",
+      "rule": "single top-level `notify` key in config.toml"
+    },
+    "codex-hooks-writer": {
+      "max": 1,
+      "default": "setting:codex.hooks-json",
+      "rule": "one program owns ~/.codex/hooks.json; plugin-bundled hooks are exempt"
+    },
+    "claude-notify": {
+      "max": 1,
+      "default": "setting:claude.notification-hook"
+    },
+    "methodology-primary": {
+      "max": 1,
+      "default": "plugin:superpowers",
+      "rule": "superpowers | compound-engineering | gstack | planning-with-files | BMAD | ECC: pick one primary"
+    },
+    "browser-automation": {
+      "max": 1,
+      "default": "plugin:playwright",
+      "rule": "playwright | chrome-devtools-mcp | superpowers-chrome | agent-browser: one browser stack per agent"
+    }
+  },
+  "components": [
+    {
+      "id": "agent:claude",
+      "kind": "agent",
+      "name": "Claude Code (native installer)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "curl or PowerShell 5.1+",
+        "Windows: Git for Windows (Git Bash) for command hooks/statusline .sh; sandbox = WSL2 only"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl -fsSL https://claude.ai/install.sh | bash",
+        "ps1": "irm https://claude.ai/install.ps1 | iex"
+      },
+      "updateCommand": "claude update",
+      "versionProbe": "claude --version",
+      "verdict": "must-have",
+      "why": "the agent itself",
+      "source": "https://code.claude.com/docs/en/setup (claude-code-install.md digest)"
+    },
+    {
+      "id": "agent:codex",
+      "kind": "agent",
+      "name": "OpenAI Codex CLI (standalone installer)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "curl (Linux/macOS) or PowerShell",
+        "Linux/WSL2 sandbox: bubblewrap (bundled fallback, needs unprivileged userns; Ubuntu 24.04+ AppArmor profile)"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+        "ps1": "irm https://chatgpt.com/codex/install.ps1 | iex"
+      },
+      "updateCommand": "codex update",
+      "versionProbe": "codex --version ; codex doctor --json",
+      "verdict": "must-have",
+      "why": "the agent itself",
+      "source": "codex-cli-install.md digest; https://learn.chatgpt.com/docs/sandboxing"
+    },
+    {
+      "id": "tool:node",
+      "kind": "tool",
+      "name": "Node.js >= 24 (LTS)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "linux": "see platform-specifics.md (nvm/fnm/NodeSource)",
+        "windows": "winget install OpenJS.NodeJS.LTS",
+        "darwin": "brew install node@24"
+      },
+      "updateCommand": "per package manager",
+      "versionProbe": "node -v",
+      "verdict": "must-have",
+      "why": "Hard floors observed from package.json engines (npm registry 2026-09-17): skills 1.6.0 >=22.20.0; @caveman-ai/cli 1.3.4 >=22.13; context-mode 1.0.169 >=22.5.0; typescript-language-server 6.0.0 >=22.22.2 (this host has 22.22.1 -> fails); agent-browser 0.38.1 >=24.0.0; chrome-devtools-mcp 1.9.0 ^20.19||^22.12||>=23; claude-mem >=20.12.0; claude-hud >=18. Node 24 satisfies all.",
+      "source": "https://registry.npmjs.org/<pkg>/latest engines fields"
+    },
+    {
+      "id": "tool:uv",
+      "kind": "tool",
+      "name": "uv (Astral)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        "ps1": "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"",
+        "windows": "winget install --id=astral-sh.uv -e"
+      },
+      "updateCommand": "uv self update",
+      "versionProbe": "uv --version",
+      "verdict": "recommended",
+      "why": "Needed by serena-agent (PyPI requires_python <3.15,>=3.11; README: uv tool install -p 3.13 serena-agent), headroom-ai (>=3.10), specify-cli/spec-kit (>=3.11), snyk-agent-scan (>=3.10), claude-mem (auto-installs uv). Missing on this host. Auto-selected when any dependant is selected.",
+      "source": "gap-4.md 1.8 (uv 0.12.15 docs+winget); https://pypi.org/pypi/serena-agent/json; /headroom-ai/json; /specify-cli/json; /snyk-agent-scan/json"
+    },
+    {
+      "id": "tool:bun",
+      "kind": "tool",
+      "name": "Bun",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl -fsSL https://bun.sh/install | bash",
+        "ps1": "powershell -c \"irm bun.sh/install.ps1|iex\""
+      },
+      "updateCommand": "bun upgrade",
+      "versionProbe": "bun --version",
+      "verdict": "optional",
+      "why": "Required by claude-mem (engines bun>=1.1.31; installer auto-installs) and gstack; already 1.4.2 on this host.",
+      "source": "npm claude-mem engines; gstack README (plugins digest)"
+    },
+    {
+      "id": "tool:python3",
+      "kind": "tool",
+      "name": "Python 3",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "windows": "winget install Python.Python.3.13"
+      },
+      "updateCommand": null,
+      "versionProbe": "python3 --version",
+      "verdict": "must-have",
+      "why": "hookify hooks run `python3 .../hooks/*.py` on every PreToolUse/PostToolUse/Stop/UserPromptSubmit; security-guidance hooks run python via bash wrapper; planning-with-files Codex hooks run python3; codex hooks examples use python3.",
+      "source": "hookify hooks/hooks.json and security-guidance hooks/hooks.json (plugin cache, 2026-09-17)"
+    },
+    {
+      "id": "tool:git-bash",
+      "kind": "tool",
+      "name": "Git for Windows (Git Bash)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "ps1": "winget install --id Git.Git -e --source winget"
+      },
+      "updateCommand": null,
+      "versionProbe": "bash --version (Git Bash)",
+      "verdict": "must-have",
+      "why": "Claude command hooks and statusline commands run through Git Bash when present, PowerShell otherwise (docs statusline Windows section); caveman plugin hooks use sed/$(...); caveman-statusline.sh; security-guidance hooks use bash wrapper; agent-notifications installer needs Git Bash.",
+      "source": "https://code.claude.com/docs/en/statusline#windows-configuration; gap-4.md section 3"
+    },
+    {
+      "id": "tool:bubblewrap",
+      "kind": "tool",
+      "name": "bubblewrap + socat (Linux/WSL2 sandboxes)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "apt": "sudo apt-get install bubblewrap socat",
+        "dnf": "sudo dnf install bubblewrap socat"
+      },
+      "updateCommand": null,
+      "versionProbe": "command -v bwrap socat",
+      "verdict": "recommended",
+      "why": "Claude Code sandboxed Bash on Linux/WSL2 relies on bubblewrap + socat (native Windows unsupported); optional seccomp filter `npm install -g @anthropic-ai/sandbox-runtime`; Codex sandbox uses bwrap (bundled fallback) and needs the AppArmor profile on Ubuntu 24.04+/25.04.",
+      "source": "https://code.claude.com/docs/en/sandboxing (fetched 2026-09-17); https://learn.chatgpt.com/docs/sandboxing"
+    },
+    {
+      "id": "tool:go",
+      "kind": "tool",
+      "name": "Go toolchain",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "apt": "sudo apt install golang-go",
+        "windows": "winget install GoLang.Go"
+      },
+      "updateCommand": null,
+      "versionProbe": "go version",
+      "verdict": "optional",
+      "why": "Only needed for gopls-lsp (`go install golang.org/x/tools/gopls@latest`). Missing on this host -> gopls-lsp plugin is a dead weight today.",
+      "source": "plugins/gopls-lsp/README.md"
+    },
+    {
+      "id": "tool:rustup",
+      "kind": "tool",
+      "name": "rustup",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+      },
+      "updateCommand": null,
+      "versionProbe": "rustup --version",
+      "verdict": "optional",
+      "why": "Only for rust-analyzer-lsp (`rustup component add rust-analyzer`).",
+      "source": "plugins/rust-analyzer-lsp/README.md"
+    },
+    {
+      "id": "tool:gh",
+      "kind": "tool",
+      "name": "GitHub CLI",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "windows": "winget install --id GitHub.cli"
+      },
+      "updateCommand": null,
+      "versionProbe": "gh --version ; gh auth status",
+      "verdict": "recommended",
+      "why": "commit-commands/commit-push-pr, code-review --comment, and the GitHub-MCP-free path (`gh` via Bash) need it; token in keyring on this host is invalid.",
+      "source": "local-inventory-audit.md 6"
+    },
+    {
+      "id": "marketplace:claude-plugins-official",
+      "kind": "marketplace",
+      "name": "Claude marketplace anthropics/claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add anthropics/claude-plugins-official"
+      },
+      "updateCommand": "claude plugin marketplace update claude-plugins-official",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "must-have",
+      "why": "official; auto-updates",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:caveman",
+      "kind": "marketplace",
+      "name": "Claude marketplace JuliusBrussee/caveman",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add JuliusBrussee/caveman"
+      },
+      "updateCommand": "claude plugin marketplace update caveman",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "must-have",
+      "why": "third-party marketplaces do NOT auto-update: run `claude plugin marketplace update caveman` before `claude plugin update caveman@caveman`",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:superpowers-marketplace",
+      "kind": "marketplace",
+      "name": "Claude marketplace obra/superpowers-marketplace",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add obra/superpowers-marketplace"
+      },
+      "updateCommand": "claude plugin marketplace update superpowers-marketplace",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "must-have",
+      "why": "elements-of-style, episodic-memory, superpowers-chrome live here",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:anthropic-agent-skills",
+      "kind": "marketplace",
+      "name": "Claude marketplace anthropics/skills",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add anthropics/skills"
+      },
+      "updateCommand": "claude plugin marketplace update anthropic-agent-skills",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "must-have",
+      "why": "document-skills, example-skills",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:compound-engineering-plugin",
+      "kind": "marketplace",
+      "name": "Claude marketplace EveryInc/compound-engineering-plugin",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add EveryInc/compound-engineering-plugin"
+      },
+      "updateCommand": "claude plugin marketplace update compound-engineering-plugin",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "optional",
+      "why": "only if compound-engineering selected",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:context-mode",
+      "kind": "marketplace",
+      "name": "Claude marketplace mksglu/context-mode",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add mksglu/context-mode"
+      },
+      "updateCommand": "claude plugin marketplace update context-mode",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "optional",
+      "why": "only if context-mode selected",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:thedotmack",
+      "kind": "marketplace",
+      "name": "Claude marketplace thedotmack/claude-mem",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add thedotmack/claude-mem"
+      },
+      "updateCommand": "claude plugin marketplace update thedotmack",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "optional",
+      "why": "marketplace name is `thedotmack`; clone is 275 MB",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:planning-with-files",
+      "kind": "marketplace",
+      "name": "Claude marketplace OthmanAdi/planning-with-files",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add OthmanAdi/planning-with-files"
+      },
+      "updateCommand": "claude plugin marketplace update planning-with-files",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "optional",
+      "why": "only if selected",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "marketplace:claude-hud",
+      "kind": "marketplace",
+      "name": "Claude marketplace jarrodwatts/claude-hud",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "claude plugin marketplace add jarrodwatts/claude-hud"
+      },
+      "updateCommand": "claude plugin marketplace update claude-hud",
+      "versionProbe": "claude plugin marketplace list",
+      "verdict": "must-have",
+      "why": "statusline slot default",
+      "source": "claude plugin marketplace add --help (2.1.273); verified in throwaway profile 2026-09-17"
+    },
+    {
+      "id": "plugin:superpowers",
+      "kind": "plugin",
+      "name": "superpowers@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "plugin:superpowers-dev",
+        "skill:superpowers-via-skills-cli"
+      ],
+      "slot": "methodology-primary",
+      "defaultSelected": true,
+      "contextCostTokens": 693,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": "+~1.1k tok hook-injected (hooks/session-start reads using-superpowers SKILL.md)",
+      "install": {
+        "claude": "claude plugin install superpowers@claude-plugins-official --scope user --json",
+        "codex": "codex plugin add superpowers@openai-curated-remote --json   # ChatGPT login only; API-key hosts: codex plugin marketplace add obra/superpowers && codex plugin add superpowers@superpowers-dev"
+      },
+      "updateCommand": "claude plugin update superpowers@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"superpowers@claude-plugins-official\")|.version'",
+      "verdict": "must-have",
+      "why": "14 skills; Codex twin exists. NOTE the estimator excludes hook-injected context: its SessionStart hook cats skills/using-superpowers/SKILL.md (3,108 chars, ~1.1k tok) into additionalContext every startup/clear/compact -> real always-on ~1.8k.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:caveman",
+      "kind": "plugin",
+      "name": "caveman@caveman",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node (hooks run node)",
+        "Windows: tool:git-bash (hooks use sed/$(..))"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:caveman"
+      ],
+      "conflictsWith": [
+        "skill:caveman-via-skills-cli(claude)"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 1814,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17 (already installed; raw/plugin-details.txt)",
+      "contextCostNote": "+ruleset text emitted by src/hooks/caveman-activate.js at SessionStart (uncounted)",
+      "install": {
+        "claude": "claude plugin install caveman@caveman --scope user --json",
+        "codex": "npx skills add JuliusBrussee/caveman --skill '*' -a codex --yes -g   # or codex plugin marketplace add JuliusBrussee/caveman && codex plugin add caveman@caveman (do not do both)"
+      },
+      "updateCommand": "claude plugin update caveman@caveman",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"caveman@caveman\")|.version'",
+      "verdict": "must-have",
+      "why": "21 skills + 3 agents + SessionStart/UserPromptSubmit hooks. Heaviest default item; SessionStart hook also prints the filtered ruleset from SKILL.md (uncounted). Installed sha 15581d1 (2.6.0) is behind v2.7.0: third-party marketplace needs explicit `marketplace update` first.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17 (already installed; raw/plugin-details.txt); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:security-guidance",
+      "kind": "plugin",
+      "name": "security-guidance@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:python3",
+        "Windows: tool:git-bash"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install security-guidance@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update security-guidance@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"security-guidance@claude-plugins-official\")|.version'",
+      "verdict": "must-have",
+      "why": "5 hooks only (bash wrapper + python); zero model context.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:context7",
+      "kind": "plugin",
+      "name": "context7@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "secret:CONTEXT7_API_KEY (optional)"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "mcp:context7-direct"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install context7@claude-plugins-official --scope user --json",
+        "codex": "codex mcp add context7 --url https://mcp.context7.com/mcp"
+      },
+      "updateCommand": "claude plugin update context7@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"context7@claude-plugins-official\")|.version'",
+      "verdict": "must-have",
+      "why": "remote HTTP MCP; tool schemas deferred by tool search (2 tools). Reads ${CONTEXT7_API_KEY:-} from env.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:playwright",
+      "kind": "plugin",
+      "name": "playwright@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node",
+        "Windows: use user-scope claude mcp add instead"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "plugin:chrome-devtools-mcp",
+        "plugin:superpowers-chrome",
+        "cli:agent-browser"
+      ],
+      "slot": "browser-automation",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install playwright@claude-plugins-official --scope user --json",
+        "codex": "codex mcp add playwright npx \"@playwright/mcp@latest\""
+      },
+      "updateCommand": "claude plugin update playwright@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"playwright@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "`npx @playwright/mcp@latest` (engines node>=18); browsers via `npx playwright install`; on native Windows the official plugin's npx spawn is known-broken (#58510) -> degrade to `claude mcp add`.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:commit-commands",
+      "kind": "plugin",
+      "name": "commit-commands@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:gh"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 108,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install commit-commands@claude-plugins-official --scope user --json",
+        "codex": "codex plugin add commit-commands@claude-plugins-official   # surfaces as skills"
+      },
+      "updateCommand": "claude plugin update commit-commands@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"commit-commands@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "3 commands; needs gh for PR flow.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:skill-creator",
+      "kind": "plugin",
+      "name": "skill-creator@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 117,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install skill-creator@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update skill-creator@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"skill-creator@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "Codex ships .system/skill-creator built-in -> Codex: nothing to install.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:frontend-design",
+      "kind": "plugin",
+      "name": "frontend-design@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 83,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install frontend-design@claude-plugins-official --scope user --json",
+        "codex": "npx skills add anthropics/skills --skill frontend-design -g -a codex -y"
+      },
+      "updateCommand": "claude plugin update frontend-design@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"frontend-design@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "1 skill, 1.25M installs.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:document-skills",
+      "kind": "plugin",
+      "name": "document-skills@anthropic-agent-skills",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:python3"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:anthropic-agent-skills"
+      ],
+      "conflictsWith": [
+        "skill:document-skills-via-skills-cli(claude)"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 759,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install document-skills@anthropic-agent-skills --scope user --json",
+        "codex": "npx skills add anthropics/skills --skill docx --skill pdf --skill pptx --skill xlsx -g -a codex -y"
+      },
+      "updateCommand": "claude plugin update document-skills@anthropic-agent-skills",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"document-skills@anthropic-agent-skills\")|.version'",
+      "verdict": "recommended",
+      "why": "docx/pdf/pptx/xlsx: 4 skills but long descriptions (~190 tok each). Skills need python libs on invoke (python-docx, openpyxl, pdf tools).",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:elements-of-style",
+      "kind": "plugin",
+      "name": "elements-of-style@superpowers-marketplace",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:superpowers-marketplace"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 65,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install elements-of-style@superpowers-marketplace --scope user --json"
+      },
+      "updateCommand": "claude plugin update elements-of-style@superpowers-marketplace",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"elements-of-style@superpowers-marketplace\")|.version'",
+      "verdict": "recommended",
+      "why": "1 skill; ~12k-token reference loaded only on invoke.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:typescript-lsp",
+      "kind": "plugin",
+      "name": "typescript-lsp@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ],
+      "prerequisites": [
+        "tool:node>=22.22.2",
+        "npm install -g typescript-language-server typescript"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install typescript-lsp@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update typescript-lsp@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"typescript-lsp@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "Plugin does not install the binary. typescript-language-server 6.0.0 requires node >=22.22.2 (host 22.22.1 fails engines). Windows: .cmd shim ENOENT bug -> Linux/WSL only.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:pyright-lsp",
+      "kind": "plugin",
+      "name": "pyright-lsp@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "pyright-langserver on PATH"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install pyright-lsp@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update pyright-lsp@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"pyright-lsp@claude-plugins-official\")|.version'",
+      "verdict": "recommended",
+      "why": "Binary: `npm install -g pyright` or `pip install pyright`/`pipx install pyright` (Windows: use pip for a real .exe).",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:gopls-lsp",
+      "kind": "plugin",
+      "name": "gopls-lsp@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:go"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install gopls-lsp@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update gopls-lsp@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"gopls-lsp@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Needs Go toolchain (`go install golang.org/x/tools/gopls@latest`); no Go on this host -> default off; auto-select when `go` detected.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:rust-analyzer-lsp",
+      "kind": "plugin",
+      "name": "rust-analyzer-lsp@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:rustup"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install rust-analyzer-lsp@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update rust-analyzer-lsp@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"rust-analyzer-lsp@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "`rustup component add rust-analyzer`; auto-select when rustup detected.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:hookify",
+      "kind": "plugin",
+      "name": "hookify@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:python3"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 297,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install hookify@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update hookify@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"hookify@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "4 python hooks fire on EVERY PreToolUse/PostToolUse/Stop/UserPromptSubmit (latency + python3 dependency) plus 297 tok; no Codex consumer.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:github",
+      "kind": "plugin",
+      "name": "github@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "secret:GITHUB_PERSONAL_ACCESS_TOKEN"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "mcp:github-readonly"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install github@claude-plugins-official --scope user --json",
+        "codex": "codex mcp add github --url https://api.githubcopilot.com/mcp/readonly --bearer-token-env-var GITHUB_PERSONAL_ACCESS_TOKEN"
+      },
+      "updateCommand": "claude plugin update github@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"github@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Remote HTTP MCP https://api.githubcopilot.com/mcp/ with Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}; 60+ tools (deferred by tool search on Claude, NOT deferred on Codex). `gh` CLI covers most needs -> off by default; prefer /readonly URL.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:mattpocock-skills",
+      "kind": "plugin",
+      "name": "mattpocock-skills@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "skill:mattpocock-cherry-pick"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 1614,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install mattpocock-skills@claude-plugins-official --scope user --json",
+        "codex": "npx skills@latest add mattpocock/skills --skill grill-me --skill handoff -g -a codex -y"
+      },
+      "updateCommand": "claude plugin update mattpocock-skills@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"mattpocock-skills@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "25 skills = 1,614 tok always-on (heavier than superpowers). `triage` audited Gen warn/MEDIUM. Cherry-pick 3-4 skills via skills CLI instead (~80 tok each): grill-me, handoff, tdd, to-spec.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:feature-dev",
+      "kind": "plugin",
+      "name": "feature-dev@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 243,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install feature-dev@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update feature-dev@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"feature-dev@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "3 agents + command; overlaps superpowers brainstorming/writing-plans.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:claude-md-management",
+      "kind": "plugin",
+      "name": "claude-md-management@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 180,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install claude-md-management@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update claude-md-management@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"claude-md-management@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Built-in /doctor (v2.1.206+) already proposes CLAUDE.md trims; Claude-only semantics.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:claude-code-setup",
+      "kind": "plugin",
+      "name": "claude-code-setup@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 144,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install claude-code-setup@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update claude-code-setup@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"claude-code-setup@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "one-shot recommender; enable per project.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:code-review",
+      "kind": "plugin",
+      "name": "code-review@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "builtin:/code-review"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 25,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install code-review@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update code-review@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"code-review@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Built-in /code-review [level] (--fix/--comment) + /ultrareview supersede it; this host has a stray project-scope duplicate to remove.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:code-simplifier",
+      "kind": "plugin",
+      "name": "code-simplifier@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "builtin:/simplify"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 69,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install code-simplifier@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update code-simplifier@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"code-simplifier@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Built-in /simplify covers it.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:pr-review-toolkit",
+      "kind": "plugin",
+      "name": "pr-review-toolkit@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 2038,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install pr-review-toolkit@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update pr-review-toolkit@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"pr-review-toolkit@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "6 agents = 2,038 tok always-on; second-heaviest item on this host. Enable per project only.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:plugin-dev",
+      "kind": "plugin",
+      "name": "plugin-dev@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 2354,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install plugin-dev@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update plugin-dev@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"plugin-dev@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "7 skills + 3 agents = 2,354 tok always-on; heaviest item on this host. Enable only when writing plugins (`claude plugin enable/disable`).",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:ralph-loop",
+      "kind": "plugin",
+      "name": "ralph-loop@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "builtin:/loop"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 89,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install ralph-loop@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update ralph-loop@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"ralph-loop@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Stop hook re-feeds prompt; built-in /loop, /goal, /schedule exist.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:session-report",
+      "kind": "plugin",
+      "name": "session-report@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 75,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install session-report@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update session-report@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"session-report@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "HTML session report.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:claude-security",
+      "kind": "plugin",
+      "name": "claude-security@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 699,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install claude-security@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update claude-security@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"claude-security@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "8 agents + 3 hooks, 699 tok; built-in /security-review + security-guidance cover the default case.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:chrome-devtools-mcp",
+      "kind": "plugin",
+      "name": "chrome-devtools-mcp@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node",
+        "Chrome"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "plugin:playwright"
+      ],
+      "slot": "browser-automation",
+      "defaultSelected": false,
+      "contextCostTokens": 809,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install chrome-devtools-mcp@claude-plugins-official --scope user --json"
+      },
+      "updateCommand": "claude plugin update chrome-devtools-mcp@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"chrome-devtools-mcp@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "7 skills (809 tok) + npx chrome-devtools-mcp@1.9.0 (engines ^20.19||^22.12||>=23; 58 tools, use --slim). Overlaps playwright.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:superpowers-chrome",
+      "kind": "plugin",
+      "name": "superpowers-chrome@superpowers-marketplace",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:superpowers-marketplace"
+      ],
+      "conflictsWith": [
+        "plugin:playwright"
+      ],
+      "slot": "browser-automation",
+      "defaultSelected": false,
+      "contextCostTokens": 58,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install superpowers-chrome@superpowers-marketplace --scope user --json"
+      },
+      "updateCommand": "claude plugin update superpowers-chrome@superpowers-marketplace",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"superpowers-chrome@superpowers-marketplace\")|.version'",
+      "verdict": "optional",
+      "why": "BETA per its own description; 135 MB cache (node_modules); CDP skill + MCP; overlaps playwright.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:example-skills",
+      "kind": "plugin",
+      "name": "example-skills@anthropic-agent-skills",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:anthropic-agent-skills"
+      ],
+      "conflictsWith": [
+        "plugin:frontend-design",
+        "plugin:skill-creator"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 939,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install example-skills@anthropic-agent-skills --scope user --json"
+      },
+      "updateCommand": "claude plugin update example-skills@anthropic-agent-skills",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"example-skills@anthropic-agent-skills\")|.version'",
+      "verdict": "optional",
+      "why": "12 skills (939 tok) incl. duplicates of frontend-design and skill-creator already installed as official plugins -> duplicate /frontend-design entries. Cherry-pick via skills CLI instead.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:compound-engineering",
+      "kind": "plugin",
+      "name": "compound-engineering@compound-engineering-plugin",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:compound-engineering-plugin"
+      ],
+      "conflictsWith": [
+        "plugin:superpowers"
+      ],
+      "slot": "methodology-primary",
+      "defaultSelected": false,
+      "contextCostTokens": 2110,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install compound-engineering@compound-engineering-plugin --scope user --json",
+        "codex": "codex plugin marketplace add EveryInc/compound-engineering-plugin && codex plugin add compound-engineering@compound-engineering-plugin"
+      },
+      "updateCommand": "claude plugin update compound-engineering@compound-engineering-plugin",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"compound-engineering@compound-engineering-plugin\")|.version'",
+      "verdict": "optional",
+      "why": "35 skills = 2,110 tok always-on (measured 2026-09-17, v3.26.3); overlaps superpowers (brainstorm/plan/review/TDD). Pick ONE methodology bundle.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:planning-with-files",
+      "kind": "plugin",
+      "name": "planning-with-files@planning-with-files",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "sh",
+        "Codex route: tool:python3"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:planning-with-files"
+      ],
+      "conflictsWith": [
+        "plugin:superpowers"
+      ],
+      "slot": "methodology-primary",
+      "defaultSelected": false,
+      "contextCostTokens": 735,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install planning-with-files@planning-with-files --scope user --json",
+        "codex": "npx skills add OthmanAdi/planning-with-files --skill planning-with-files -g -a codex -y   # ships .codex/hooks.json; hooks need /hooks trust"
+      },
+      "updateCommand": "claude plugin update planning-with-files@planning-with-files",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"planning-with-files@planning-with-files\")|.version'",
+      "verdict": "optional",
+      "why": "14 skills (735 tok) + 6 hooks that re-inject plan context per turn (uncounted); skills.sh audit Runlayer fail/HIGH (advisory); overlaps superpowers writing-plans/executing-plans.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:context-mode",
+      "kind": "plugin",
+      "name": "context-mode@context-mode",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=22.5"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:context-mode"
+      ],
+      "conflictsWith": [
+        "cli:rtk",
+        "cli:caveman-cli-shrink-hook",
+        "cli:headroom"
+      ],
+      "slot": "tool-output-compressor",
+      "defaultSelected": false,
+      "contextCostTokens": 631,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install context-mode@context-mode --scope user --json",
+        "codex": "codex plugin marketplace add mksglu/context-mode && codex plugin add context-mode@context-mode   # bundled hooks need /hooks trust"
+      },
+      "updateCommand": "claude plugin update context-mode@context-mode",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"context-mode@context-mode\")|.version'",
+      "verdict": "optional",
+      "why": "8 skills (631 tok) + 6 hooks incl. PreToolUse on Bash/Read/Grep/WebFetch/Agent + MCP (11 tools, deferred). Elastic-2.0 licence; 169 MB cache; engines node>=22.5. Same layer as caveman proxy/rtk (tool-output compression) -> choose one.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:remember",
+      "kind": "plugin",
+      "name": "remember@claude-plugins-official",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-plugins-official"
+      ],
+      "conflictsWith": [
+        "plugin:claude-mem",
+        "plugin:episodic-memory",
+        "cli:caveman-cli(cavemem)"
+      ],
+      "slot": "memory",
+      "defaultSelected": false,
+      "contextCostTokens": 78,
+      "contextCostSource": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on)",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install remember@claude-plugins-official --scope user --json",
+        "codex": "codex plugin marketplace add Digital-Process-Tools/claude-remember && codex plugin add remember@remember-dev"
+      },
+      "updateCommand": "claude plugin update remember@claude-plugins-official",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"remember@claude-plugins-official\")|.version'",
+      "verdict": "optional",
+      "why": "Cheapest memory plugin (78 tok, 4 hooks, Haiku summaries cost API tokens). Overlaps built-in auto memory (on by default, MEMORY.md first 200 lines/25KB loaded each session). Installed 0.32.0 here; 0.33.0 upstream.",
+      "source": "Anthropic plugin-stats catalog plugin-details.json generated_at 2026-09-16T07:35Z (tokens.claude-opus-4-7.always_on); claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:claude-mem",
+      "kind": "plugin",
+      "name": "claude-mem@thedotmack",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=20.12",
+        "tool:bun",
+        "tool:uv"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:thedotmack"
+      ],
+      "conflictsWith": [
+        "plugin:remember",
+        "plugin:episodic-memory"
+      ],
+      "slot": "memory",
+      "defaultSelected": false,
+      "contextCostTokens": 1472,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install claude-mem@thedotmack --scope user --json"
+      },
+      "updateCommand": "claude plugin update claude-mem@thedotmack",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"claude-mem@thedotmack\")|.version'",
+      "verdict": "optional",
+      "why": "20 skills (1,472 tok) + 7 hooks (Setup/SessionStart/UserPromptSubmit/PostToolUse/PreToolUse/Stop/SessionEnd) + MCP + background worker; 481 MB cache (tree-sitter grammars); engines node>=20.12 AND bun>=1.1.31; auto-installs bun + uv; installer pre-selects the hosted paid 'CMEM Pro / claude-mem observer' (OAuth to cmem.ai) unless `--provider claude` / `CLAUDE_MEM_ONLINE_OPTIN=false`. Default OFF even in ALL.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md",
+      "forceOffInAll": true,
+      "forceOffReason": "hosted provider opt-out required; heavy; overlaps auto memory (docs.claude-mem.ai/installation, fetched 2026-09-17)"
+    },
+    {
+      "id": "plugin:episodic-memory",
+      "kind": "plugin",
+      "name": "episodic-memory@superpowers-marketplace",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:superpowers-marketplace"
+      ],
+      "conflictsWith": [
+        "plugin:remember",
+        "plugin:claude-mem"
+      ],
+      "slot": "memory",
+      "defaultSelected": false,
+      "contextCostTokens": 83,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install episodic-memory@superpowers-marketplace --scope user --json",
+        "codex": "npm install -g github:obra/episodic-memory && codex plugin marketplace add /path/to/episodic-memory"
+      },
+      "updateCommand": "claude plugin update episodic-memory@superpowers-marketplace",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"episodic-memory@superpowers-marketplace\")|.version'",
+      "verdict": "optional",
+      "why": "1 skill + 1 agent (83 tok) + MCP + SessionStart sync; indexes Claude AND Codex transcripts; needs `npm run build`/global install for CLI on Codex.",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md"
+    },
+    {
+      "id": "plugin:claude-hud",
+      "kind": "plugin",
+      "name": "claude-hud@claude-hud",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=18"
+      ],
+      "dependsOn": [
+        "agent:claude",
+        "marketplace:claude-hud"
+      ],
+      "conflictsWith": [
+        "statusline:caveman-badge",
+        "cli:ccstatusline",
+        "statusline:ccusage"
+      ],
+      "slot": "statusline",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17",
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude plugin install claude-hud@claude-hud --scope user --json"
+      },
+      "updateCommand": "claude plugin update claude-hud@claude-hud",
+      "versionProbe": "claude plugin list --json | jq '.[]|select(.id==\"claude-hud@claude-hud\")|.version'",
+      "verdict": "recommended",
+      "why": "Statusline plugin: 0 tok (2 commands only). Needs Node 18+ or Bun (Windows: Node only); `/claude-hud:setup` writes settings.statusLine; 45 MB cache. Slot default; caveman badge snippet must be merged into it (caveman does not overwrite an existing statusLine).",
+      "source": "claude plugin details in throwaway CLAUDE_CONFIG_DIR, Claude Code 2.1.273, 2026-09-17; claude-plugins-landscape.md",
+      "postInstall": "claude -p is not enough: run /claude-hud:setup once, then merge caveman badge snippet (src/hooks/README.md)"
+    },
+    {
+      "id": "statusline:caveman-badge",
+      "kind": "setting",
+      "name": "caveman statusline badge (src/hooks/caveman-statusline.sh|.ps1)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "Windows: tool:git-bash or use the .ps1 with forward-slash path"
+      ],
+      "dependsOn": [
+        "plugin:caveman"
+      ],
+      "conflictsWith": [
+        "plugin:claude-hud",
+        "cli:ccstatusline",
+        "statusline:ccusage"
+      ],
+      "slot": "statusline",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "json": "{\"statusLine\":{\"type\":\"command\",\"command\":\"bash /path/to/caveman-statusline.sh\"}}"
+      },
+      "updateCommand": "re-copy from plugin cache on plugin update (current `ls -td` glob is fragile)",
+      "versionProbe": "jq .statusLine ~/.claude/settings.json",
+      "verdict": "optional",
+      "why": "Current owner on this host. Only ONE statusLine object exists in settings.json.",
+      "source": "token-efficiency-and-workflow-tools.md 1.7; docs statusline"
+    },
+    {
+      "id": "cli:ccstatusline",
+      "kind": "tool",
+      "name": "ccstatusline (npx -y ccstatusline@latest)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [
+        "plugin:claude-hud",
+        "statusline:caveman-badge",
+        "statusline:ccusage"
+      ],
+      "slot": "statusline",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "json": "{\"statusLine\":{\"type\":\"command\",\"command\":\"npx -y ccstatusline@latest\",\"padding\":0,\"refreshInterval\":10}}"
+      },
+      "updateCommand": "none (npx @latest)",
+      "versionProbe": "jq .statusLine.command ~/.claude/settings.json",
+      "verdict": "optional",
+      "why": "alternative statusline",
+      "source": "token-efficiency digest 3 (npm 2.2.29, engines node>=14)"
+    },
+    {
+      "id": "statusline:ccusage",
+      "kind": "setting",
+      "name": "ccusage statusline (beta)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:ccusage"
+      ],
+      "conflictsWith": [
+        "plugin:claude-hud",
+        "statusline:caveman-badge",
+        "cli:ccstatusline"
+      ],
+      "slot": "statusline",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "json": "{\"statusLine\":{\"type\":\"command\",\"command\":\"npx -y ccusage statusline\",\"padding\":0}}"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "cost-centric statusline",
+      "source": "ccusage README (token-efficiency digest)"
+    },
+    {
+      "id": "cli:ccusage",
+      "kind": "tool",
+      "name": "ccusage 20.x (usage/cost analyzer, Claude + Codex)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node (no engines field)"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npx ccusage@latest   # or bunx ccusage; codex: ccusage codex daily"
+      },
+      "updateCommand": "none (npx @latest)",
+      "versionProbe": "npx ccusage@latest --version",
+      "verdict": "recommended",
+      "why": "no config writes, no context cost",
+      "source": "https://registry.npmjs.org/ccusage/latest (20.0.20, 2026-08-15)"
+    },
+    {
+      "id": "cli:caveman-cli",
+      "kind": "tool",
+      "name": "@caveman-ai/cli 1.3.4 (proxy + native hooks + cavemem + statusline)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=22.13",
+        "Windows: install.ps1 path; Codex hooks disabled on Windows"
+      ],
+      "dependsOn": [
+        "tool:node"
+      ],
+      "conflictsWith": [
+        "cli:rtk",
+        "cli:headroom",
+        "cli:pxpipe",
+        "plugin:context-mode"
+      ],
+      "slot": "api-proxy",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npm install -g @caveman-ai/cli && caveman setup --install",
+        "claude-native": "caveman setup --agent-native claude",
+        "codex-native": "caveman setup --agent-native codex   # Linux/macOS only; rewrites model_provider=caveman"
+      },
+      "updateCommand": "npm i -g @caveman-ai/cli@latest && caveman setup --install",
+      "versionProbe": "caveman --version ; caveman doctor",
+      "verdict": "optional",
+      "why": "Writes 10 hook events into ~/.claude/settings.json incl. a PreToolUse Bash `shrink-hook` (updatedInput rewriter) and, for Codex, model_provider=caveman + [mcp_servers.caveman] + ~/.codex/hooks.json. Two updatedInput rewriters on the same tool are non-deterministic (docs: 'last one to finish takes effect'). Default OFF in ALL; installed on this host already, so `update` keeps it.",
+      "source": "token-efficiency digest 1.5/1.7; https://code.claude.com/docs/en/hooks-guide (updatedInput parallel note); npm engines",
+      "forceOffInAll": true,
+      "forceOffReason": "rewrites Codex model_provider and owns 10 hook events; ask explicitly"
+    },
+    {
+      "id": "cli:caveman-cli-shrink-hook",
+      "kind": "setting",
+      "name": "caveman shrink-hook (PreToolUse Bash rewriter)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:caveman-cli"
+      ],
+      "conflictsWith": [
+        "cli:rtk",
+        "cli:headroom-desktop-rewrite",
+        "plugin:context-mode"
+      ],
+      "slot": "bash-rewriter",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "installed by caveman setup --agent-native; disable with `caveman tools config set think.shrink off`"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "one Bash updatedInput rewriter max",
+      "source": "hooks-guide docs; token-efficiency digest 1.4/1.7"
+    },
+    {
+      "id": "cli:rtk",
+      "kind": "tool",
+      "name": "rtk v0.49.0 (Rust Token Killer)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [],
+      "conflictsWith": [
+        "cli:caveman-cli-shrink-hook",
+        "plugin:context-mode",
+        "cli:headroom-desktop-rewrite"
+      ],
+      "slot": "bash-rewriter",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
+        "brew": "brew install rtk",
+        "windows": "winget install rtk-ai.rtk (manifest lags: 0.46.0)",
+        "wire": "rtk init -g ; rtk init -g --codex"
+      },
+      "updateCommand": "re-run installer / brew upgrade rtk / winget upgrade rtk-ai.rtk",
+      "versionProbe": "rtk --version",
+      "verdict": "optional",
+      "why": "JetBrains A/B (July 2026): +7.6% cost at low effort, +0.1% at high; PreToolUse updatedInput on Bash conflicts with caveman shrink-hook. Default OFF in ALL.",
+      "source": "token-efficiency digest 2 (rtk README; JetBrains blog)",
+      "forceOffInAll": true,
+      "forceOffReason": "independent A/B shows no saving; rewriter slot"
+    },
+    {
+      "id": "cli:headroom",
+      "kind": "tool",
+      "name": "headroom-ai 0.37.0 (API-boundary compressing proxy)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:uv (python>=3.10)"
+      ],
+      "dependsOn": [
+        "tool:uv"
+      ],
+      "conflictsWith": [
+        "cli:caveman-cli",
+        "cli:pxpipe",
+        "plugin:context-mode"
+      ],
+      "slot": "api-proxy",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "uv tool install --python 3.13 \"headroom-ai[all]\"",
+        "wire": "headroom wrap claude ; headroom wrap codex ; undo: headroom unwrap <tool>"
+      },
+      "updateCommand": "headroom update",
+      "versionProbe": "headroom --version",
+      "verdict": "optional",
+      "why": "Sets ANTHROPIC_BASE_URL to a local proxy: Claude docs list a custom ANTHROPIC_BASE_URL as a configuration WITHOUT tool search (all MCP tools load up-front) and Remote Control is unavailable behind a non-api.anthropic.com host. Also installs Serena. Default OFF in ALL.",
+      "source": "https://code.claude.com/docs/en/mcp (tool search section); token-efficiency digest 2",
+      "forceOffInAll": true,
+      "forceOffReason": "ANTHROPIC_BASE_URL proxy disables MCP tool search + Remote Control"
+    },
+    {
+      "id": "cli:pxpipe",
+      "kind": "tool",
+      "name": "pxpipe-proxy 0.13.2",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=20.19"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [
+        "cli:caveman-cli",
+        "cli:headroom"
+      ],
+      "slot": "api-proxy",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npx pxpipe-proxy ; ANTHROPIC_BASE_URL=http://127.0.0.1:47821 claude"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "skip",
+      "why": "Renders context as images; README admits silent confabulation risk on hex strings; same ANTHROPIC_BASE_URL caveat.",
+      "source": "token-efficiency digest 2",
+      "forceOffInAll": true,
+      "forceOffReason": "lossy; proxy caveat"
+    },
+    {
+      "id": "cli:skills",
+      "kind": "tool",
+      "name": "skills CLI 1.6.0 (vercel-labs/skills)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=22.20.0",
+        "Windows: symlinks/junctions (Developer Mode) or --copy"
+      ],
+      "dependsOn": [
+        "tool:node"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 <subcommand>   # pin; do not npm i -g"
+      },
+      "updateCommand": "bump pin in the installer; `npx skills update -g -y` updates skills",
+      "versionProbe": "npx -y skills@1.6.0 list -g",
+      "verdict": "must-have",
+      "why": "cross-agent skill installer; lock v3 at ~/.agents/.skill-lock.json; audits (Gen/Socket/Snyk/Runlayer/ZeroLeaks) are advisory and disabled by DISABLE_TELEMETRY/DO_NOT_TRACK",
+      "source": "https://registry.npmjs.org/skills/latest (engines node>=22.20.0, 1.6.0 published 2026-09-17); skills-ecosystem.md 4"
+    },
+    {
+      "id": "skill:find-skills",
+      "kind": "skill",
+      "name": "find-skills",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 121,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": "audit: Gen SAFE, Socket pass, Snyk warn/MEDIUM, Runlayer NONE",
+      "install": {
+        "*": "npx -y skills@1.6.0 add vercel-labs/skills --skill find-skills -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "must-have",
+      "why": "on-demand skills.sh search; already installed (334 chars frontmatter ~121 tok/agent)",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:caveman-via-skills-cli(codex)",
+      "kind": "skill",
+      "name": "caveman skills for Codex (20 skills)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "codex-plugin:caveman"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 1560,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add JuliusBrussee/caveman --skill '*' -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "must-have",
+      "why": "Codex reads ~/.agents/skills natively; 20 caveman skills = 4,x00 chars frontmatter ~1.5k tok per Codex session (est). Already installed here. Do NOT also add caveman as a Codex plugin (duplicate $caveman entries).",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:document-skills(codex)",
+      "kind": "skill",
+      "name": "docx/pdf/pptx/xlsx for Codex",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "plugin:document-skills (if -a claude-code were added)"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 760,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add anthropics/skills --skill docx --skill pdf --skill pptx --skill xlsx -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "recommended",
+      "why": "same SKILL.md as the Claude plugin; ~190 tok each (est from plugin measurement)",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:frontend-design(codex)",
+      "kind": "skill",
+      "name": "frontend-design for Codex",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 83,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": "audit: Gen SAFE, Socket pass, Snyk LOW",
+      "install": {
+        "*": "npx -y skills@1.6.0 add anthropics/skills --skill frontend-design -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "recommended",
+      "why": "mirror of the Claude plugin",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:mattpocock-cherry-pick",
+      "kind": "skill",
+      "name": "grill-me + handoff + tdd + to-spec (mattpocock/skills)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "plugin:mattpocock-skills"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 320,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": "audit grill-me: Gen SAFE, Socket pass, Snyk LOW",
+      "install": {
+        "*": "npx -y skills@1.6.0 add mattpocock/skills --skill grill-me --skill handoff --skill tdd --skill to-spec -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "recommended",
+      "why": "4 skills ~80 tok each instead of the 1,614-tok 25-skill plugin; skip `triage` (Gen warn/MEDIUM)",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:obsidian-skills",
+      "kind": "skill",
+      "name": "kepano/obsidian-skills (5 skills)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 400,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add kepano/obsidian-skills -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "optional",
+      "why": "Obsidian users only; audits all pass",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:vercel-agent-skills",
+      "kind": "skill",
+      "name": "vercel-labs/agent-skills (react/web guidelines)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 170,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add vercel-labs/agent-skills --skill react-best-practices --skill web-design-guidelines -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "optional",
+      "why": "React/Next users only",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:proxmox-admin",
+      "kind": "skill",
+      "name": "bastos/skills proxmox-admin",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 90,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add https://github.com/bastos/skills --skill proxmox-admin -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "optional",
+      "why": "homelab profile; 7-star repo, vet before global; audit Gen SAFE/Socket pass/Snyk LOW/Runlayer warn MEDIUM",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:agent-browser",
+      "kind": "skill",
+      "name": "vercel-labs/agent-browser skill",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=24",
+        "cli:agent-browser"
+      ],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "plugin:playwright"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 100,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": "Snyk MEDIUM, Runlayer fail/HIGH (advisory)",
+      "install": {
+        "*": "npx -y skills@1.6.0 add https://github.com/vercel-labs/agent-browser --skill agent-browser -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "optional",
+      "why": "needs `npm install -g agent-browser` (engines node>=24.0.0 -> fails on Node 22) + `agent-browser install --with-deps`; audit Runlayer fail/HIGH + Snyk warn/MEDIUM -> default OFF",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:planning-with-files(skill)",
+      "kind": "skill",
+      "name": "planning-with-files via skills CLI",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "plugin:planning-with-files"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 100,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add OthmanAdi/planning-with-files --skill planning-with-files -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "optional",
+      "why": "Runlayer fail/HIGH (advisory); overlaps superpowers",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "skill:superpowers-via-skills-cli",
+      "kind": "skill",
+      "name": "obra/superpowers via skills CLI",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "cli:skills"
+      ],
+      "conflictsWith": [
+        "plugin:superpowers",
+        "codex-plugin:superpowers"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 690,
+      "contextCostSource": "estimate: frontmatter chars / 2.75 (median chars-per-token of Anthropic's estimator across 248 official plugins)",
+      "contextCostNote": null,
+      "install": {
+        "*": "npx -y skills@1.6.0 add obra/superpowers -a claude-code -a codex -g -y"
+      },
+      "updateCommand": "npx -y skills@1.6.0 update -g -y",
+      "versionProbe": "jq '.skills[\"<name>\"]' ~/.agents/.skill-lock.json",
+      "verdict": "skip",
+      "why": "duplicates the plugin route on both agents (duplicate /name and $name entries); Runlayer fail/HIGH on brainstorming (advisory)",
+      "source": "skills-ecosystem.md 8 + skills.sh audit API"
+    },
+    {
+      "id": "cli:agent-browser",
+      "kind": "tool",
+      "name": "agent-browser 0.38.1 CLI",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=24.0.0 (engines; host 22.22.1 gets EBADENGINE)"
+      ],
+      "dependsOn": [
+        "tool:node"
+      ],
+      "conflictsWith": [
+        "plugin:playwright"
+      ],
+      "slot": "browser-automation",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npm install -g agent-browser && agent-browser install --with-deps"
+      },
+      "updateCommand": "agent-browser upgrade",
+      "versionProbe": "agent-browser --version",
+      "verdict": "optional",
+      "why": "Node 24 floor; browser download; playwright plugin already covers browsing",
+      "source": "https://registry.npmjs.org/agent-browser/latest (engines node>=24.0.0, pnpm>=11; published 2026-09-16)"
+    },
+    {
+      "id": "codex-plugin:superpowers",
+      "kind": "codex-plugin",
+      "name": "superpowers@openai-curated-remote 6.3.0",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "auth:chatgpt (remote catalog needs ChatGPT login; API-key hosts use git marketplace route)"
+      ],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "skill:superpowers-via-skills-cli"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 690,
+      "contextCostSource": "estimate = Claude measurement (same 14 SKILL.md files)",
+      "contextCostNote": null,
+      "install": {
+        "chatgpt": "codex plugin add superpowers@openai-curated-remote --json",
+        "api-key": "codex plugin marketplace add obra/superpowers && codex plugin add superpowers@superpowers-dev --json"
+      },
+      "updateCommand": "none for remote (server-side reconcile); git route: codex plugin marketplace upgrade --json",
+      "versionProbe": "codex plugin list --json",
+      "verdict": "must-have",
+      "why": "already installed on this account",
+      "source": "gap-1.md 7-8 (verified in throwaway CODEX_HOME)"
+    },
+    {
+      "id": "codex-plugin:caveman",
+      "kind": "codex-plugin",
+      "name": "caveman@caveman via git marketplace (alternative to skills route)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "skill:caveman-via-skills-cli(codex)"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 1560,
+      "contextCostSource": "estimate (same skills)",
+      "contextCostNote": null,
+      "install": {
+        "*": "codex plugin marketplace add JuliusBrussee/caveman && codex plugin add caveman@caveman --json"
+      },
+      "updateCommand": "codex plugin marketplace upgrade --json",
+      "versionProbe": "codex plugin list --json",
+      "verdict": "optional",
+      "why": "brings Claude-format SessionStart/UserPromptSubmit hooks (need /hooks trust; runtime unverified); pick ONE caveman channel per agent",
+      "source": "gap-1.md 7"
+    },
+    {
+      "id": "codex-plugin:context7",
+      "kind": "codex-plugin",
+      "name": "context7@claude-plugins-official (Codex git-mkt route)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "mcp:context7(codex)"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "codex plugin marketplace add anthropics/claude-plugins-official && codex plugin add context7@claude-plugins-official --json"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "MCP route (`codex mcp add`) is simpler and allows the API-key header",
+      "source": "gap-1.md 7"
+    },
+    {
+      "id": "mcp:context7(codex)",
+      "kind": "mcp",
+      "name": "Context7 remote MCP for Codex",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "secret:CONTEXT7_API_KEY (optional)"
+      ],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "codex-plugin:context7"
+      ],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "codex mcp add context7 --url https://mcp.context7.com/mcp"
+      },
+      "updateCommand": "none",
+      "versionProbe": "codex mcp get context7",
+      "verdict": "must-have",
+      "why": "2 tools; Codex has NO tool-search deferral, so keep the Codex MCP set to ~4-5 servers / <60 tools",
+      "source": "mcp-servers-landscape.md 4"
+    },
+    {
+      "id": "mcp:playwright(codex)",
+      "kind": "mcp",
+      "name": "Playwright MCP for Codex",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex",
+        "tool:node"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "codex mcp add playwright npx \"@playwright/mcp@latest\""
+      },
+      "updateCommand": null,
+      "versionProbe": "codex mcp get playwright",
+      "verdict": "recommended",
+      "why": "~29 core tools, all loaded up-front on Codex (no deferral)",
+      "source": "mcp-servers-landscape.md 4"
+    },
+    {
+      "id": "mcp:serena(codex)",
+      "kind": "mcp",
+      "name": "Serena (uv) for Codex",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:uv",
+        "python 3.11-3.14 (requires_python <3.15,>=3.11; uv -p 3.13 downloads its own)"
+      ],
+      "dependsOn": [
+        "agent:codex",
+        "tool:uv"
+      ],
+      "conflictsWith": [
+        "plugin:serena(claude)"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "uv tool install -p 3.13 serena-agent && serena setup codex"
+      },
+      "updateCommand": "uv tool upgrade serena-agent",
+      "versionProbe": "serena --version",
+      "verdict": "optional",
+      "why": "Codex has no LSP plugin surface; Serena gives symbol tools. On Claude it duplicates LSP plugins -> Claude off.",
+      "source": "https://pypi.org/pypi/serena-agent/json (1.7.0); oraios/serena README"
+    },
+    {
+      "id": "mcp:github-readonly",
+      "kind": "mcp",
+      "name": "GitHub remote MCP /readonly (both)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "secret:GITHUB_PERSONAL_ACCESS_TOKEN"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [
+        "plugin:github"
+      ],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "claude": "claude mcp add --scope user --transport http github https://api.githubcopilot.com/mcp/readonly --header \"Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}\"",
+        "codex": "codex mcp add github --url https://api.githubcopilot.com/mcp/readonly --bearer-token-env-var GITHUB_PERSONAL_ACCESS_TOKEN"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "60+ tools; on Codex they all load. `gh` CLI is the default path.",
+      "source": "mcp-servers-landscape.md 4 (composed from documented /readonly URL)"
+    },
+    {
+      "id": "setting:codex.memories",
+      "kind": "setting",
+      "name": "Codex built-in memories ([features] memories = true)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "cli:caveman-cli(cavemem on codex)"
+      ],
+      "slot": "memory(codex)",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "toml": "[features]\nmemories = true"
+      },
+      "updateCommand": null,
+      "versionProbe": "codex features list | grep memories",
+      "verdict": "recommended",
+      "why": "off by default on 0.154.0; native, no plugin",
+      "source": "codex-cli-install.md 10"
+    },
+    {
+      "id": "setting:codex.notify",
+      "kind": "setting",
+      "name": "Codex notify + [tui] notifications (installer-owned template)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "cli:tokentracker",
+        "cli:agent-notifications(codex)"
+      ],
+      "slot": "codex-notify",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "toml": "notify = [\"<per-OS notifier>\"]\n[tui]\nnotifications = true"
+      },
+      "updateCommand": null,
+      "versionProbe": "grep -E '^notify' ~/.codex/config.toml",
+      "verdict": "recommended",
+      "why": "`notify` is a single top-level key; TokenTracker and agent-notifications also write it -> one owner",
+      "source": "token-efficiency digest 6; codex config reference"
+    },
+    {
+      "id": "setting:codex.hooks-json",
+      "kind": "setting",
+      "name": "~/.codex/hooks.json (installer-owned declarative merge)",
+      "agents": [
+        "codex"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:codex"
+      ],
+      "conflictsWith": [
+        "cli:caveman-cli(codex-native)",
+        "plugin:context-mode(manual fallback)",
+        "cli:agent-notifications(codex)",
+        "cli:tokentracker"
+      ],
+      "slot": "codex-hooks-writer",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "write hooks.json with `command` + `commandWindows`; then tell user: run codex -> /hooks -> trust"
+      },
+      "updateCommand": null,
+      "versionProbe": "cat ~/.codex/hooks.json",
+      "verdict": "recommended",
+      "why": "Several tools rewrite this one file with their own merge logic (caveman agent-native marks blocks, context-mode manual route, agent-notifications, planning-with-files copies); new/changed hooks stay untrusted until /hooks. Plugin-bundled hooks (context-mode, remember, planning-with-files, claude-mem Codex plugin) avoid the file entirely -> prefer plugin routes.",
+      "source": "codex-cli-install.md 10 hooks; gap-1.md 8"
+    },
+    {
+      "id": "setting:claude.notification-hook",
+      "kind": "setting",
+      "name": "Claude Notification hook + preferredNotifChannel (per OS)",
+      "agents": [
+        "claude"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [],
+      "dependsOn": [
+        "agent:claude"
+      ],
+      "conflictsWith": [
+        "cli:agent-notifications(claude)"
+      ],
+      "slot": "claude-notify",
+      "defaultSelected": true,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "linux": "notify-send 'Claude Code' 'Claude Code needs your attention'",
+        "darwin": "osascript -e 'display notification ...'",
+        "windows": "soulee-dev claude-hook-toast.ps1"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "recommended",
+      "why": "hooks merge, so multiple Notification hooks coexist, but avoid double toasts",
+      "source": "token-efficiency digest 6 (docs hooks templates)"
+    },
+    {
+      "id": "cli:agent-notifications",
+      "kind": "tool",
+      "name": "777genius/agent-notifications v1.43.1 (Slack/Telegram/ntfy\u2026 for Claude+Codex)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "Windows: tool:git-bash to install; GPL-3.0"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [
+        "setting:codex.notify",
+        "cli:tokentracker"
+      ],
+      "slot": "codex-notify",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "sh": "(set -o pipefail; curl -fsSL https://raw.githubusercontent.com/777genius/agent-notifications/a512deb5819c3f8c7c3be8335f713cc8bb734fc3/bin/setup.sh | bash -s -- --product both)"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "registers its own hooks (Claude) and Codex hooks (need /hooks trust)",
+      "source": "token-efficiency digest 6"
+    },
+    {
+      "id": "cli:tokentracker",
+      "kind": "tool",
+      "name": "TokenTracker (tokentracker-cli 0.97.2)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:node>=20"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [
+        "setting:codex.notify",
+        "cli:agent-notifications"
+      ],
+      "slot": "codex-notify",
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "npx tokentracker-cli"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "optional",
+      "why": "writes Claude SessionEnd hook + Codex `notify`; ccusage covers usage without config writes",
+      "source": "token-efficiency digest 3; npm engines"
+    },
+    {
+      "id": "cli:spec-kit",
+      "kind": "tool",
+      "name": "GitHub spec-kit (specify-cli 1.0.7)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:uv (requires_python >=3.11)"
+      ],
+      "dependsOn": [
+        "tool:uv"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "uv tool install specify-cli"
+      },
+      "updateCommand": "specify self upgrade",
+      "versionProbe": "specify --version",
+      "verdict": "optional",
+      "why": "per-project files only; overlaps superpowers/CE planning",
+      "source": "https://pypi.org/pypi/specify-cli/json; token-efficiency digest 7"
+    },
+    {
+      "id": "cli:snyk-agent-scan",
+      "kind": "tool",
+      "name": "Snyk Agent Scan 0.6.3 (skill scanner)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:uv (>=3.10)"
+      ],
+      "dependsOn": [
+        "tool:uv"
+      ],
+      "conflictsWith": [],
+      "slot": null,
+      "defaultSelected": false,
+      "contextCostTokens": 0,
+      "contextCostSource": null,
+      "contextCostNote": null,
+      "install": {
+        "*": "uvx snyk-agent-scan@latest ~/.agents/skills"
+      },
+      "updateCommand": null,
+      "versionProbe": null,
+      "verdict": "recommended",
+      "why": "post-install audit of skills dirs; needs uv",
+      "source": "https://pypi.org/pypi/snyk-agent-scan/json; skills-ecosystem.md 7"
+    },
+    {
+      "id": "plugin:gstack",
+      "kind": "plugin",
+      "name": "garrytan/gstack (64 skills, own browser)",
+      "agents": [
+        "both"
+      ],
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "prerequisites": [
+        "tool:bun",
+        "git",
+        "bundled Chromium"
+      ],
+      "dependsOn": [],
+      "conflictsWith": [
+        "plugin:superpowers",
+        "plugin:playwright"
+      ],
+      "slot": "methodology-primary",
+      "defaultSelected": false,
+      "contextCostTokens": null,
+      "contextCostSource": "unknown (not installed: clone-based install into ~/.claude/skills, self-updates hourly; ships gstack-context-bill)",
+      "contextCostNote": null,
+      "install": {
+        "*": "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup",
+        "codex": "./setup --host codex"
+      },
+      "updateCommand": "self-updating (hourly)",
+      "versionProbe": "ls ~/.claude/skills/gstack",
+      "verdict": "optional",
+      "why": "64 skills => estimated 3-5k always-on (at the measured 60-100 tok/skill); heavy; self-updating clone bypasses the installer's lock",
+      "source": "claude-plugins-landscape.md 3.1"
+    }
+  ]
+}

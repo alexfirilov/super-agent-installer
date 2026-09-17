@@ -1,0 +1,105 @@
+id,name,class,current_verdict,github_repo,stars,stars_observed,last_commit,weekly_downloads,downloads_source,latest_publish,claude_unique_installs,claude_installs_generated_at,claude_plugin_last_updated,skillssh_installs,skillssh_skills,skillssh_observed,mcp_registry_name,mcp_registry_latest(version/updatedAt),pulsemcp_note,audit_skillssh(2026-09-17),audit_gate,last_activity,age_days,recency_mult,popularity_norm,score,popularity_band,flag
+agent:codex,OpenAI Codex CLI,agent,must-have,openai/codex,124904,2026-09-17,2026-09-17,17149232,npm @openai/codex 2026-09-05..2026-09-11,2026-09-09,,,,,,,,,,,pass,2026-09-17,0,1.0,0.993,99.3,top,agree
+agent:claude,Claude Code,agent,must-have,anthropics/claude-code,145797,2026-09-17,2026-09-17,10994666,npm @anthropic-ai/claude-code 2026-09-05..2026-09-11,2026-09-16,,,,,,,,,,,pass,2026-09-17,0,1.0,0.987,98.7,top,agree
+marketplace:anthropic-agent-skills,anthropics/skills,marketplace,must-have,anthropics/skills,176820,2026-09-17,2026-09-10,,,,,,,3200000,21,2026-09-17,,,,pass,pass,2026-09-10,7,1.0,0.999,99.9,top,agree
+marketplace:caveman,caveman marketplace,marketplace,must-have,JuliusBrussee/caveman,106223,2026-09-17,2026-09-16,,,,,,,3300000,23,2026-09-17,,,,pass,pass,2026-09-16,1,1.0,0.977,97.7,top,agree
+marketplace:thedotmack,claude-mem marketplace,marketplace,optional,thedotmack/claude-mem,94105,2026-09-17,2026-09-16,21528,npm claude-mem 2026-09-05..2026-09-11,2026-09-16,,,,86300,24,2026-09-17,,,,,pass,2026-09-16,1,1.0,0.909,90.9,top,promote-candidate
+marketplace:claude-plugins-official,claude-plugins-official,marketplace,must-have,anthropics/claude-plugins-official,36463,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.869,86.9,top,agree
+marketplace:claude-hud,claude-hud,marketplace,must-have,jarrodwatts/claude-hud,28182,2026-09-17,2026-08-28,,,,,,,,,,,,,,pass,2026-08-28,20,1.0,0.848,84.8,mid,agree
+marketplace:compound-engineering-plugin,compound-engineering-plugin,marketplace,optional,EveryInc/compound-engineering-plugin,25139,2026-09-17,2026-09-15,,,,,,,119300,132,2026-09-17,,,,,pass,2026-09-15,2,1.0,0.811,81.1,mid,agree
+marketplace:context-mode,context-mode,marketplace,optional,mksglu/context-mode,23334,2026-09-17,2026-09-17,,,,,,,12500,19,2026-09-17,,,,,pass,2026-09-17,0,1.0,0.738,73.8,mid,agree
+marketplace:planning-with-files,planning-with-files,marketplace,optional,OthmanAdi/planning-with-files,26959,2026-09-17,2026-09-17,,,,,,,98200,7,2026-09-17,,,,Runlayer=fail,warn(Runlayer fail),2026-09-17,0,1.0,0.808,72.7,mid,agree
+marketplace:claude-plugins-community,claude-plugins-community,marketplace,recommended,anthropics/claude-plugins-community,4177,2026-09-17,2026-08-24,,,,,,,,,,,,,,pass,2026-08-24,24,1.0,0.69,69.0,mid,agree
+marketplace:superpowers-marketplace,superpowers-marketplace,marketplace,must-have,obra/superpowers-marketplace,1264,2026-09-17,2026-09-08,,,,,,,,,,,,,,pass,2026-09-08,9,1.0,0.591,59.1,tail,popularity-does-not-support-must-have
+mcp:home-assistant,Home Assistant MCP (native),mcp,recommended,home-assistant/core,90619,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,1.0,100.0,top,agree
+mcp:playwright,Playwright MCP,mcp,recommended,microsoft/playwright-mcp,37202,2026-09-17,2026-09-14,4633135,npm @playwright/mcp 2026-09-05..2026-09-11,2026-09-14,352727,2026-09-11,2025-12-01,,,,io.github.microsoft/playwright-mcp,0.0.81/2026-09-14,#2 all-time (#1 this week); 5.5m visitors/wk,,pass,2026-09-14,3,1.0,0.967,96.7,top,agree
+mcp:context7,Context7 MCP,mcp,must-have,upstash/context7,62114,2026-09-17,2026-09-17,1132952,npm @upstash/context7-mcp 2026-09-05..2026-09-11,2026-09-14,446283,2026-09-11,2026-09-08,,,,io.github.upstash/context7,4.1.1/2026-09-14,#4 (#5 this week); 1.4m/wk,,pass,2026-09-17,0,1.0,0.956,95.6,top,agree
+mcp:github,GitHub MCP (remote),mcp,recommended,github/github-mcp-server,32998,2026-09-17,2026-09-16,,,,344375,2026-09-11,2025-12-01,,,,io.github.github/github-mcp-server,1.12.2/2026-09-16,#14 (#321 this week); 3.3k/wk,,pass,2026-09-16,1,1.0,0.943,94.3,top,agree
+mcp:chrome-devtools,chrome-devtools-mcp,mcp,optional,ChromeDevTools/chrome-devtools-mcp,52186,2026-09-17,2026-09-17,1516489,npm chrome-devtools-mcp 2026-09-05..2026-09-11,2026-09-08,117775,2026-09-11,2026-09-08,,,,,,"2.3m/wk (mcp-servers-landscape.md, 2026-09-17)",,pass,2026-09-17,0,1.0,0.927,92.7,top,promote-candidate
+mcp:serena,Serena,mcp,recommended,oraios/serena,29518,2026-09-17,2026-09-17,42977,pypistats serena-agent last_week (2026-09-17),2026-08-09,92094,2026-09-11,2025-12-01,,,,io.github.oraios/serena,1.5.3/2026-05-26,#157 (#58 this week); 43.5k/wk,,pass,2026-09-17,0,1.0,0.822,82.2,mid,agree
+mcp:exa,Exa MCP,mcp,recommended,exa-labs/exa-mcp-server,5014,2026-09-17,2026-08-21,79339,npm exa-mcp-server 2026-09-05..2026-09-11,2026-08-18,,,,,,,ai.exa/exa,3.1.3/2025-12-05,,,pass,2026-08-21,27,1.0,0.741,74.1,mid,agree
+mcp:grafana,Grafana MCP,mcp,recommended,grafana/mcp-grafana,3463,2026-09-17,2026-09-17,unknown,pypistats mcp-grafana: 429 rate-limited,2026-09-17,,,,,,,io.github.grafana/mcp-grafana,v1.5.0/2026-09-17,"140k/wk (mcp-servers-landscape.md, 2026-09-17)",,pass,2026-09-17,0,1.0,0.714,71.4,mid,agree
+mcp:gitmcp,GitMCP,mcp,optional,idosal/git-mcp,8401,2026-09-17,2026-05-08,,,,,,,,,,,,"100k/wk (mcp-servers-landscape.md, 2026-09-17)",,pass,2026-05-08,132,0.9,0.792,71.2,mid,agree
+mcp:docker-mcp-gateway,Docker MCP Gateway,mcp,recommended,docker/mcp-gateway,1570,2026-09-17,2026-09-16,,,,,,,,,,,,,,pass,2026-09-16,1,1.0,0.645,64.5,mid,agree
+mcp:kubernetes,kubernetes-mcp-server,mcp,recommended,containers/kubernetes-mcp-server,2103,2026-09-17,2026-09-16,5646,npm kubernetes-mcp-server 2026-09-05..2026-09-11,2026-07-31,,,,,,,io.github.containers/kubernetes-mcp-server,0.0.66/2026-07-31,,,pass,2026-09-16,1,1.0,0.617,61.7,mid,agree
+agent:opencode,OpenCode,other-agent,must-have,anomalyco/opencode,208071,2026-09-17,2026-09-17,1774358,npm opencode-ai 2026-09-05..2026-09-11,2026-09-14,,,,,,,,,,,pass,2026-09-17,0,1.0,0.993,99.3,top,agree
+agent:ollama,Ollama,other-agent,recommended,ollama/ollama,181244,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.989,98.9,top,agree
+agent:pi,Pi coding agent,other-agent,recommended,badlogic/pi-mono,106577,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.945,94.5,top,agree
+agent:copilot-cli,GitHub Copilot CLI,other-agent,recommended,github/copilot-cli,11178,2026-09-17,2026-09-16,2183464,npm @github/copilot 2026-09-05..2026-09-11,2026-09-16,,,,,,,,,,,pass,2026-09-16,1,1.0,0.881,88.1,top,agree
+agent:crush,Crush,other-agent,recommended,charmbracelet/crush,28143,2026-09-17,2026-09-17,3685,npm @charmland/crush 2026-09-05..2026-09-11,2026-09-16,,,,,,,,,,,pass,2026-09-17,0,1.0,0.7,70.0,mid,agree
+plugin:mattpocock-skills,mattpocock-skills,plugin,optional,mattpocock/skills,264100,2026-09-17,2026-09-17,,,,45070,2026-09-11,2026-09-15,23000000,54,2026-09-17,,,,pass,pass,2026-09-17,0,1.0,0.996,99.6,top,promote-candidate
+plugin:frontend-design,frontend-design,plugin,recommended,anthropics/skills,176820,2026-09-17,2026-09-10,,,,1245390,2026-09-11,2026-09-01,3200000,21,2026-09-17,,,,pass,pass,2026-09-10,7,1.0,0.979,97.9,top,agree
+plugin:document-skills,document-skills,plugin,recommended,anthropics/skills,176820,2026-09-17,2026-09-10,,,,,,,3200000,21,2026-09-17,,,,pass,pass,2026-09-10,7,1.0,0.925,92.5,top,agree
+plugin:example-skills,example-skills,plugin,optional,anthropics/skills,176820,2026-09-17,2026-09-10,,,,,,,3200000,21,2026-09-17,,,,pass,pass,2026-09-10,7,1.0,0.925,92.5,top,promote-candidate
+plugin:playwright,playwright,plugin,recommended,microsoft/playwright-mcp,37202,2026-09-17,2026-09-14,4633135,npm @playwright/mcp 2026-09-05..2026-09-11,2026-09-14,352727,2026-09-11,2025-12-01,,,,io.github.microsoft/playwright-mcp,0.0.81/2026-09-14,#2 all-time (#1 this week); 5.5m visitors/wk,,pass,2026-09-14,3,1.0,0.916,91.6,top,agree
+plugin:context7,context7,plugin,must-have,upstash/context7,62114,2026-09-17,2026-09-17,1132952,npm @upstash/context7-mcp 2026-09-05..2026-09-11,2026-09-14,446283,2026-09-11,2026-09-08,,,,io.github.upstash/context7,4.1.1/2026-09-14,#4 (#5 this week); 1.4m/wk,,pass,2026-09-17,0,1.0,0.903,90.3,top,agree
+plugin:superpowers,superpowers,plugin,must-have,obra/superpowers,287928,2026-09-17,2026-08-12,,,,1112404,2026-09-11,2026-08-12,3200000,14,2026-09-17,,,,"Socket=warn,Runlayer=fail",warn(Runlayer fail),2026-08-12,36,1.0,0.996,89.7,top,agree
+plugin:security-guidance,security-guidance,plugin,must-have,,unknown,,,,,,264175,2026-09-11,2026-09-09,,,,,,,,pass,2026-09-09,8,1.0,0.89,89.0,top,agree
+plugin:chrome-devtools-mcp,chrome-devtools-mcp,plugin,optional,ChromeDevTools/chrome-devtools-mcp,52186,2026-09-17,2026-09-17,1516489,npm chrome-devtools-mcp 2026-09-05..2026-09-11,2026-09-08,117775,2026-09-11,2026-09-08,,,,,,"2.3m/wk (mcp-servers-landscape.md, 2026-09-17)",,pass,2026-09-17,0,1.0,0.877,87.7,top,promote-candidate
+plugin:github,github,plugin,optional,github/github-mcp-server,32998,2026-09-17,2026-09-16,,,,344375,2026-09-11,2025-12-01,,,,io.github.github/github-mcp-server,1.12.2/2026-09-16,#14 (#321 this week); 3.3k/wk,,pass,2026-09-16,1,1.0,0.865,86.5,top,promote-candidate
+plugin:skill-creator,skill-creator,plugin,recommended,,unknown,,,,,,425686,2026-09-11,2026-04-23,,,,,,,,pass,2026-04-23,147,0.9,0.924,83.1,mid,agree
+plugin:vercel,vercel (official mkt),plugin,optional,vercel/vercel,16257,2026-09-17,2026-09-08,,,,266556,2026-09-11,2026-09-15,,,,,,,,pass,2026-09-15,2,1.0,0.826,82.6,mid,agree
+plugin:claude-hud,claude-hud,plugin,recommended,jarrodwatts/claude-hud,28182,2026-09-17,2026-08-28,,,,,,,,,,,,,,pass,2026-08-28,20,1.0,0.815,81.5,mid,agree
+plugin:caveman,caveman,plugin,must-have,JuliusBrussee/caveman,106223,2026-09-17,2026-09-16,16052,npm @caveman-ai/cli 2026-09-05..2026-09-11,2026-09-15,,,,3300000,23,2026-09-17,,,,pass,pass,2026-09-16,1,1.0,0.809,80.9,mid,agree
+plugin:plugin-dev,plugin-dev,plugin,optional,,unknown,,,,,,71861,2026-09-11,2026-08-06,,,,,,,,pass,2026-08-06,42,1.0,0.797,79.7,mid,agree
+plugin:claude-code-setup,claude-code-setup,plugin,optional,,unknown,,,,,,216255,2026-09-11,2026-05-28,,,,,,,,pass,2026-05-28,112,0.9,0.875,78.8,mid,agree
+plugin:ralph-loop,ralph-loop,plugin,optional,,unknown,,,,,,204151,2026-09-11,2026-03-28,,,,,,,,pass,2026-03-28,173,0.9,0.871,78.4,mid,agree
+plugin:serena,serena (official mkt),plugin,optional,oraios/serena,29518,2026-09-17,2026-09-17,42977,pypistats serena-agent last_week (2026-09-17),2026-08-09,92094,2026-09-11,2025-12-01,,,,io.github.oraios/serena,1.5.3/2026-05-26,#157 (#58 this week); 43.5k/wk,,pass,2026-09-17,0,1.0,0.774,77.4,mid,agree
+plugin:pr-review-toolkit,pr-review-toolkit,plugin,optional,,unknown,,,,,,122935,2026-09-11,2026-04-28,,,,,,,,pass,2026-04-28,142,0.9,0.835,75.2,mid,agree
+plugin:compound-engineering,compound-engineering,plugin,optional,EveryInc/compound-engineering-plugin,25139,2026-09-17,2026-09-15,,,,,,,119300,132,2026-09-17,,,,,pass,2026-09-15,2,1.0,0.752,75.2,mid,agree
+plugin:claude-mem,claude-mem,plugin,optional,thedotmack/claude-mem,94105,2026-09-17,2026-09-16,21528,npm claude-mem 2026-09-05..2026-09-11,2026-09-16,,,,86300,24,2026-09-17,,,,,pass,2026-09-16,1,1.0,0.748,74.8,mid,agree
+plugin:gstack,gstack,plugin,optional,garrytan/gstack,133425,2026-09-17,2026-09-16,,,,,,,42000,64,2026-09-17,,,,"Socket=warn,Snyk=warn,Runlayer=fail,ZeroLeaks=warn",warn(Runlayer fail),2026-09-16,1,1.0,0.795,71.6,mid,agree
+plugin:hookify,hookify,plugin,optional,,unknown,,,,,,64119,2026-09-11,2026-05-19,,,,,,,,pass,2026-05-19,121,0.9,0.789,71.0,mid,agree
+plugin:claude-security,claude-security,plugin,optional,,unknown,,,,,,18989,2026-09-11,2026-09-01,,,,,,,,pass,2026-09-01,16,1.0,0.702,70.2,mid,agree
+plugin:code-review,code-review,plugin,optional,,unknown,,,,,,476550,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.932,69.9,mid,agree
+plugin:context-mode,context-mode,plugin,optional,mksglu/context-mode,23334,2026-09-17,2026-09-17,,,,,,,12500,19,2026-09-17,,,,,pass,2026-09-17,0,1.0,0.688,68.8,mid,agree
+plugin:code-simplifier,code-simplifier,plugin,optional,,unknown,,,,,,371594,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.914,68.5,mid,agree
+plugin:claude-md-management,claude-md-management,plugin,optional,,unknown,,,,,,312229,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.901,67.6,mid,agree
+plugin:planning-with-files,planning-with-files,plugin,optional,OthmanAdi/planning-with-files,26959,2026-09-17,2026-09-17,,,,,,,98200,7,2026-09-17,,,,Runlayer=fail,warn(Runlayer fail),2026-09-17,0,1.0,0.75,67.5,mid,agree
+plugin:feature-dev,feature-dev,plugin,optional,,unknown,,,,,,271218,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.891,66.9,mid,agree
+plugin:typescript-lsp,typescript-lsp,plugin,recommended,,unknown,,,,,,227188,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.879,65.9,mid,agree
+plugin:commit-commands,commit-commands,plugin,recommended,,unknown,,,,,,181242,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.863,64.7,mid,agree
+plugin:pyright-lsp,pyright-lsp,plugin,recommended,,unknown,,,,,,118299,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.832,62.4,mid,agree
+plugin:session-report,session-report,plugin,optional,,unknown,,,,,,13764,2026-09-11,2026-04-10,,,,,,,,pass,2026-04-10,160,0.9,0.679,61.1,mid,agree
+plugin:remember,remember,plugin,optional,Digital-Process-Tools/claude-remember,173,2026-09-17,2026-09-17,,,,59513,2026-09-11,2026-09-15,10,1,2026-09-17,,,,,pass,2026-09-17,0,1.0,0.583,58.3,tail,agree
+plugin:gopls-lsp,gopls-lsp,plugin,optional,,unknown,,,,,,44358,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.762,57.2,tail,agree
+plugin:rust-analyzer-lsp,rust-analyzer-lsp,plugin,optional,,unknown,,,,,,38360,2026-09-11,2026-02-20,,,,,,,,pass,2026-02-20,209,0.75,0.752,56.4,tail,agree
+plugin:episodic-memory,episodic-memory,plugin,optional,obra/episodic-memory,478,2026-09-17,2026-09-10,,,,,,,,,,,,,,pass,2026-09-10,7,1.0,0.491,49.1,tail,agree
+plugin:elements-of-style,elements-of-style,plugin,recommended,obra/the-elements-of-style,577,2026-09-17,2026-08-12,,,,,,,1800,1,2026-09-17,,,,,pass,2026-08-12,36,1.0,0.477,47.7,tail,demote-candidate
+plugin:superpowers-chrome,superpowers-chrome,plugin,optional,obra/superpowers-chrome,354,2026-09-17,2026-08-07,,,,,,,,,,,,,,pass,2026-08-07,41,1.0,0.467,46.7,tail,agree
+skill:mattpocock-cherry-pick,mattpocock/skills,skill,recommended,mattpocock/skills,264100,2026-09-17,2026-09-17,,,,,,,23000000,54,2026-09-17,,,,pass,pass,2026-09-17,0,1.0,1.0,100.0,top,agree
+skill:vercel-agent-skills,vercel-labs/agent-skills,skill,optional,vercel-labs/agent-skills,31274,2026-09-17,2026-08-28,,,,,,,2400000,16,2026-09-17,,,,,unaudited,2026-08-28,20,1.0,0.846,84.6,mid,agree
+skill:obsidian-skills,obsidian-skills,skill,optional,kepano/obsidian-skills,48484,2026-09-17,2026-09-15,,,,,,,373600,6,2026-09-17,,,,pass,pass,2026-09-15,2,1.0,0.815,81.5,mid,agree
+skill:find-skills,find-skills,skill,must-have,vercel-labs/skills,31854,2026-09-17,2026-09-16,,,,,,,3400000,1,2026-09-17,,,,Snyk=warn,warn,2026-09-16,1,1.0,0.857,81.4,mid,agree
+skill:proxmox-admin,proxmox-admin (bastos/skills),skill,optional,bastos/skills,7,2026-09-17,2026-08-06,,,,,,,1100,29,2026-09-17,,,,Runlayer=warn,warn,2026-08-06,42,1.0,0.28,26.6,tail,agree
+tool:uv,uv,tool,recommended,astral-sh/uv,89915,2026-09-17,2026-09-17,27838333,pypistats uv last_week (2026-09-17),2026-09-15,,,,,,,,,,,pass,2026-09-17,0,1.0,0.982,98.2,top,agree
+tool:bun,bun,tool,optional,oven-sh/bun,95977,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.97,97.0,top,promote-candidate
+cli:rtk,rtk,tool,optional,rtk-ai/rtk,80818,2026-09-17,2026-09-14,,,,,,,,,,,,,,pass,2026-09-14,3,1.0,0.955,95.5,top,promote-candidate
+tool:gh,GitHub CLI,tool,recommended,cli/cli,46307,2026-09-17,2026-09-15,,,,,,,,,,,,,,pass,2026-09-15,2,1.0,0.908,90.8,top,agree
+tool:shellcheck,shellcheck,tool,must-have,koalaman/shellcheck,40047,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.896,89.6,top,agree
+tool:jq,jq,tool,must-have,jqlang/jq,35615,2026-09-17,2026-09-15,,,,,,,,,,,,,,pass,2026-09-15,2,1.0,0.886,88.6,top,agree
+cli:skills,skills CLI (skills.sh),tool,must-have,vercel-labs/skills,31854,2026-09-17,2026-09-16,4621540,npm skills 2026-09-05..2026-09-11,2026-09-17,,,,3400000,1,2026-09-17,,,,Snyk=warn,warn,2026-09-17,0,1.0,0.92,87.4,top,agree
+tool:claude-code-templates,claude-code-templates,tool,optional,davila7/claude-code-templates,30768,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.873,87.3,top,promote-candidate
+tool:fnm,fnm,tool,recommended,Schniz/fnm,26877,2026-09-17,2026-07-24,,,,,,,,,,,,,,pass,2026-07-24,55,1.0,0.862,86.2,top,agree
+tool:gum,gum,tool,recommended,charmbracelet/gum,24387,2026-09-17,2026-09-11,,,,,,,,,,,,,,pass,2026-09-11,6,1.0,0.854,85.4,top,agree
+tool:chezmoi,chezmoi,tool,recommended,twpayne/chezmoi,21638,2026-09-17,2026-09-17,,,,,,,,,,,,,,pass,2026-09-17,0,1.0,0.844,84.4,mid,agree
+tool:yq,yq,tool,recommended,mikefarah/yq,15971,2026-09-17,2026-09-15,,,,,,,,,,,,,,pass,2026-09-15,2,1.0,0.818,81.8,mid,agree
+cli:playwright-cli,Playwright CLI,tool,recommended,microsoft/playwright-cli,13360,2026-09-17,2026-09-14,675949,npm @playwright/cli 2026-09-05..2026-09-11,,,,,161600,2,2026-09-17,,,,,pass,2026-09-14,3,1.0,0.794,79.4,mid,agree
+cli:headroom,headroom,tool,optional,chopratejas/headroom,72649,2026-09-17,2026-09-17,53150,pypistats headroom-ai last_week (2026-09-17),2026-08-27,,,,,,,,,,,pass,2026-09-17,0,1.0,0.79,79.0,mid,agree
+cli:spec-kit,spec-kit,tool,optional,github/spec-kit,137528,2026-09-17,2026-09-17,20006,pypistats specify-cli last_week (2026-09-17),2026-09-15,,,,,,,,,,,pass,2026-09-17,0,1.0,0.789,78.9,mid,agree
+cli:agent-browser,agent-browser,tool,optional,vercel-labs/agent-browser,42781,2026-09-17,2026-09-16,1070795,npm agent-browser 2026-09-05..2026-09-11,2026-09-16,,,,873800,4,2026-09-17,,,,"Snyk=warn,Runlayer=fail",warn(Runlayer fail),2026-09-16,1,1.0,0.872,78.5,mid,agree
+cli:caveman-cli,@caveman-ai/cli,tool,optional,JuliusBrussee/caveman,106223,2026-09-17,2026-09-16,16052,npm @caveman-ai/cli 2026-09-05..2026-09-11,2026-09-15,,,,,,,,,,pass,pass,2026-09-16,1,1.0,0.772,77.2,mid,agree
+cli:mcp-inspector,MCP Inspector,tool,recommended,modelcontextprotocol/inspector,10902,2026-09-17,2026-09-16,223589,npm @modelcontextprotocol/inspector 2026-09-05..2026-09-11,2026-09-16,,,,,,,,,,,pass,2026-09-16,1,1.0,0.752,75.2,mid,agree
+tool:bats-core,bats-core,tool,recommended,bats-core/bats-core,6266,2026-09-17,2026-09-15,,,,,,,,,,,,,,pass,2026-09-15,2,1.0,0.739,73.9,mid,agree
+cli:ccusage,ccusage,tool,recommended,ccusage/ccusage,18596,2026-09-17,2026-09-17,60170,npm ccusage 2026-09-05..2026-09-11,2026-09-17,,,,,,,,,,,pass,2026-09-17,0,1.0,0.736,73.6,mid,agree
+cli:ccstatusline,ccstatusline,tool,optional,sirmalloc/ccstatusline,12915,2026-09-17,2026-09-17,25427,npm ccstatusline 2026-09-05..2026-09-11,2026-09-03,,,,,,,,,,,pass,2026-09-17,0,1.0,0.696,69.6,mid,agree
+tool:claude-codex-settings,claude-codex-settings,tool,recommended,fcakyon/claude-codex-settings,1145,2026-09-17,2026-09-16,,,,,,,,,,,,,,pass,2026-09-16,1,1.0,0.595,59.5,tail,demote-candidate
+cli:add-mcp,add-mcp,tool,recommended,neon-solutions/add-mcp,298,2026-09-17,2026-09-08,113044,npm add-mcp 2026-09-05..2026-09-11,2026-09-08,,,,,,,,,,,pass,2026-09-08,9,1.0,0.58,58.0,tail,demote-candidate
+cli:agent-notifications,agent-notifications,tool,optional,777genius/agent-notifications,812,2026-09-17,2026-09-16,,,,,,,,,,,,,,pass,2026-09-16,1,1.0,0.566,56.6,tail,agree
+tool:mcpm,mcpm,tool,optional,pathintegral-institute/mcpm.sh,1000,2026-09-17,2026-05-22,,,,,,,,,,,,,,pass,2026-05-22,118,0.9,0.584,52.6,tail,agree
+cli:snyk-agent-scan,snyk-agent-scan,tool,recommended,,unknown,,,4392,pypistats snyk-agent-scan last_week (2026-09-17),2026-09-10,,,,,,,,,,,pass,2026-09-10,7,1.0,0.489,48.9,tail,demote-candidate
+cli:pxpipe,pxpipe,tool,skip,,unknown,,,3238,npm pxpipe-proxy 2026-09-05..2026-09-11,2026-08-21,,,,,,,,,,,pass,2026-08-21,27,1.0,0.472,47.2,tail,agree
+tool:kasetto,kasetto,tool,recommended,pivoshenko/kasetto,201,2026-09-17,2026-09-14,,,,,,,,,,,,,,pass,2026-09-14,3,1.0,0.449,44.9,tail,demote-candidate
+cli:tokentracker,tokentracker,tool,optional,,unknown,,,2059,npm tokentracker-cli 2026-09-05..2026-09-11,2026-09-16,,,,,,,,,,,pass,2026-09-16,1,1.0,0.445,44.5,tail,agree
+tool:smithery-cli,Smithery CLI,tool,optional,smithery-ai/cli,834,2026-09-17,2026-05-31,793,npm smithery 2026-09-05..2026-09-11,,,,,,,,,,,,pass,2026-05-31,109,0.9,0.479,43.1,tail,agree
+tool:aiupdate,aiupdate,tool,recommended,narze/aiupdate,13,2026-09-17,2026-06-16,,,,,,,,,,,,,,pass,2026-06-16,93,0.9,0.223,20.1,tail,demote-candidate
