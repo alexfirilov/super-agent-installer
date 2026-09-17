@@ -34,6 +34,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   let a: CliArgs; try { a = parseCli(argv); } catch (e) { console.error((e as Error).message); console.error(HELP); return 1; }
   if (a.command === 'help') { if (a.error) console.error(a.error); console.log(HELP); return a.error ? 1 : 0; }
   if (a.command === 'version') { console.log(VERSION); return 0; }
+  if (a.only && a.only.length === 0) a.only = undefined; // an empty --only list is treated as not provided so it does not silently bypass the picker
   const ctx = await createCtx({ dryRun: a.dryRun, yes: a.yes, noAudit: a.noAudit, channel: a.channel, verbose: a.verbose, json: a.json, manifestPath: a.manifest, logFile: a.logFile });
   const tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
   switch (a.command) {
@@ -48,7 +49,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     case 'uninstall': if (!tty && !a.yes) { console.error('Unable to run interactively. Run with --yes'); return 3; } return runUninstall(ctx, a.ids, { json: a.json, installerVersion: VERSION });
     case 'list': return runList(ctx);
     case 'doctor': return runDoctor(ctx);
-    case 'self-update': { const r = await selfUpdate(ctx, VERSION); console.log(r.message); return 0; }
+    case 'self-update': { const r = await selfUpdate(ctx, VERSION); console.log(r.message); return r.ok ? 0 : 1; }
   }
   return 1;
 }
