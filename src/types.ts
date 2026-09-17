@@ -73,6 +73,7 @@ export interface Ctx {
   host: HostInfo; paths: Paths; run: Runner; log: Logger; dryRun: boolean; yes: boolean; noAudit: boolean; channel: Channel;
   secrets: Map<string, string>; fetch: typeof fetch; env: Record<string, string | undefined>; manifest: Manifest;
   auth?: Partial<Record<'claude' | 'codex', AuthState>>;
+  secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
 }
 export interface Installed { version: string | null; details?: Record<string, unknown> }
 export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'configure';
