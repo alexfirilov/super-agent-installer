@@ -8,6 +8,8 @@ describe('parseCli', () => {
     expect(parseCli(['update', '--no-self-update', '--from-state'])).toMatchObject({ command: 'update', noSelfUpdate: true, fromState: true });
     expect(parseCli(['install'])).toMatchObject({ noLogin: false });
     expect(parseCli(['install', '--no-login'])).toMatchObject({ noLogin: true });
+    expect(parseCli(['install'])).toMatchObject({ noPersistSecrets: false });
+    expect(parseCli(['install', '--no-persist-secrets'])).toMatchObject({ noPersistSecrets: true });
     expect(parseCli(['--version'])).toMatchObject({ command: 'version' }); expect(parseCli(['bogus'])).toMatchObject({ command: 'help', error: expect.stringContaining('bogus') });
     expect(() => parseCli(['install', '--profile', 'nope'])).toThrow(/profile/);
   });

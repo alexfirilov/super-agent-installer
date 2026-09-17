@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { runInstall } from '../../src/commands/install.js';
 import { runUpdate } from '../../src/commands/update.js';
 import { registerProvider, clearProviders } from '../../src/providers/registry.js';
@@ -115,5 +116,31 @@ describe('runInstall sign-in wiring', () => {
     await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true });
     expect(ctx.auth).toBeUndefined();
     expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
+  });
+});
+
+// Task 5: persist everything in ctx.secrets (including a captured token that never went through promptSecrets)
+// once, after promptSecrets, unless --dry-run or --no-persist-secrets.
+describe('runInstall secret persistence wiring', () => {
+  it('persists everything in ctx.secrets, including a pre-captured token, and records the result on ctx.secretsPersist', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
+    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    expect(ctx.secretsPersist?.persisted).toEqual(['CLAUDE_CODE_OAUTH_TOKEN']);
+    expect(readFileSync(join(ctx.host.home, '.profile'), 'utf8')).toContain("export CLAUDE_CODE_OAUTH_TOKEN='captured-token'");
+  });
+  it('--no-persist-secrets skips persistence entirely', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
+    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0', noPersistSecrets: true });
+    expect(ctx.secretsPersist).toBeUndefined();
+    expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
+  });
+  it('--dry-run never persists secrets', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest, dryRun: true, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
+    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    expect(ctx.secretsPersist).toBeUndefined();
+    expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
   });
 });

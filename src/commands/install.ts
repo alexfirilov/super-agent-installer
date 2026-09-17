@@ -6,7 +6,8 @@ import { readState, writeState, buildState } from '../state/state.js';
 import { renderPlan, renderSummary, promptSecrets, postInstallHints } from './summary.js';
 import { ensureAuth, isHeadless } from '../auth/agents.js';
 import { probeVersion } from '../detect/tools.js';
-export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean }
+import { persistSecrets } from '../secrets/persist.js';
+export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean; noPersistSecrets?: boolean }
 const NIX_SNIPPET = `NixOS detected. Use home-manager instead:\n  programs.claude-code.enable = true;\n  programs.codex.enable = true;\nSee https://home-manager-options.extranix.com/?query=claude-code`;
 /** Agents this run actually needs signed in: the agent-target excludes the other agent on at least one
  * selected component, AND either the agent's own component is in the selection (it will exist by the
@@ -37,6 +38,10 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
     }
   }
   if (!ctx.dryRun) await promptSecrets(ctx, sel.components); // before planning: MCP specs substitute ${VAR} at plan time
+  if (!ctx.dryRun && !o.noPersistSecrets && ctx.secrets.size) {
+    ctx.secretsPersist = await persistSecrets(ctx, ctx.secrets); // after promptSecrets, so it covers everything in ctx.secrets including a captured CLAUDE_CODE_OAUTH_TOKEN
+    for (const f of ctx.secretsPersist.failed) ctx.log.warn(`could not persist ${f.name} to the user environment: ${f.reason}`);
+  }
   const preview = await buildPlan(sel, ctx, 'install', { preview: true });
   if (!o.json) console.log(renderPlan(preview.actions));
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
