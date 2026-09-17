@@ -48,10 +48,10 @@ describe('refreshEnvironment', () => {
     ctx.calls.length = 0;
     process.env.PATH = '/usr/bin';
     refreshEnvironment(ctx);
-    const home = ctx.host.home;
-    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:/usr/local/bin:/usr/bin`);
+    const home = ctx.host.home; const goBin = `${process.env.GOPATH ?? `${home}/go`}/bin`;
+    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:/usr/local/bin:/usr/bin`);
     refreshEnvironment(ctx);
-    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:/usr/local/bin:/usr/bin`);
+    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:/usr/local/bin:/usr/bin`);
     await getClaudeState(ctx); expect(ctx.calls.some((a) => a.join(' ') === 'claude --version')).toBe(true); // re-detected
   });
 });

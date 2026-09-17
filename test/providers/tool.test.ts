@@ -90,6 +90,12 @@ describe('toolProvider', () => {
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['go', 'install', 'golang.org/x/tools/gopls@latest']);
   });
+  it('go install tells the user where the binary went so the LSP plugin can find it (found by real-host apply: ~/go/bin is not on PATH)', async () => {
+    const ctx = makeTestCtx({ responses: { 'go env GOPATH': '/home/u/go' } });
+    const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });
+    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.message).toMatch(/\/home\/u\/go\/bin/); expect(r.message).toMatch(/PATH/);
+  });
   it('go uninstall removes the binary from GOPATH/bin', async () => {
     const gopath = mkdtempSync(join(tmpdir(), 'sai-gopath-'));
     mkdirSync(join(gopath, 'bin'), { recursive: true });

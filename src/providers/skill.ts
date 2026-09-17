@@ -51,6 +51,11 @@ export const skillProvider: Provider = {
       const argv = npx('add', spec.repo, ...(named ? named.flatMap((s) => ['--skill', s]) : ['--skill', '*']), '-g', ...spec.targets.flatMap((t) => ['-a', t]), '-y');
       if (ctx.host.platform === 'windows' && ctx.host.windowsDeveloperMode === false) argv.push('--copy');
       const r = await ctx.run(argv, { allowFailure: true, timeoutMs: 600000 }); if (r.code !== 0) return fail(`skills add failed: ${(r.stderr || r.stdout).trim()}`);
+      // the skills CLI exits 0 and says nothing when a --skill name does not exist in the repo; check the lock so a typo in the manifest is a visible failure instead of an install that repeats on every run
+      if (named && !ctx.dryRun) {
+        const lock = await readSkillLock(join(ctx.host.home, '.agents', '.skill-lock.json'));
+        if (Object.keys(lock).length) { const missing = named.filter((s) => !lock[s]); if (missing.length) return fail(`skills add reported success but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not in ~/.agents/.skill-lock.json: no skill with that name in ${spec.repo}?`); }
+      }
       return ok(`installed ${named ? named.join(', ') : spec.repo}`);
     })];
   },

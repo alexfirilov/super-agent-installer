@@ -22,6 +22,16 @@ describe('skillProvider', () => {
     const win = makeTestCtx({ host: { platform: 'windows', windowsDeveloperMode: false }, fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [`${cmd} --copy`]: 'installed' } });
     expect((await (await skillProvider.plan(skill('sk-mp', 'mattpocock/skills', ['grill-me', 'tdd']), win, null, 'install'))[0]!.run(win)).ok).toBe(true);
   });
+  it('fails when skills add exits 0 but a named skill never landed in the lock file (found by real-host apply: the skills CLI ignores unknown names)', async () => {
+    const cmd = `npx -y skills@${SKILLS_CLI} add a/b --skill real --skill nope -g -a claude-code -a codex -y`;
+    const ctx = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
+    withLock(ctx, { real: { source: 'a/b', skillFolderHash: 'abc' } });
+    const r = await (await skillProvider.plan(skill('sk-ab', 'a/b', ['real', 'nope']), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toMatch(/nope/); expect(r.message).not.toMatch(/\breal\b/);
+    const good = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
+    withLock(good, { real: { source: 'a/b' }, nope: { source: 'a/b' } });
+    expect((await (await skillProvider.plan(skill('sk-ab', 'a/b', ['real', 'nope']), good, null, 'install'))[0]!.run(good)).ok).toBe(true);
+  });
   it('blocks on audit fail unless --no-audit, warns on warn', async () => {
     const ctx = makeTestCtx({ fetch: auditFetch('fail'), responses: { 'node --version': 'v24.19.0' } });
     const r = await (await skillProvider.plan(skill('sk-bad', 'evil/skills', ['x']), ctx, null, 'install'))[0]!.run(ctx); expect(r.ok).toBe(false); expect(r.message).toMatch(/--no-audit/);

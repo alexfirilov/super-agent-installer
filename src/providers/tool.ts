@@ -155,7 +155,13 @@ export const toolProvider: Provider = {
       if (cmd === 'nosudo') return fail(`${c.name}: needs root or sudo to use ${h.pkgManager}; install it manually or rerun as root`);
       if (cmd) { await aptUpdateOnce(ctx, cmd); await ctx.run(cmd, { timeoutMs: 600000 }); }
       else if (p.npm) await npmGlobal(ctx, p.npm);
-      else if (p.go) await ctx.run(['go', 'install', p.go.includes('@') ? p.go : `${p.go}@latest`], { timeoutMs: 600000 });
+      else if (p.go) {
+        await ctx.run(['go', 'install', p.go.includes('@') ? p.go : `${p.go}@latest`], { timeoutMs: 600000 });
+        // `go install` drops the binary in GOPATH/bin, which is rarely on the user's PATH; the LSP plugins look it up on PATH
+        const gopath = (await ctx.run(['go', 'env', 'GOPATH'], { readOnly: true, allowFailure: true })).stdout.trim() || join(h.home, 'go');
+        await post();
+        return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}; add that directory to PATH so the LSP plugin can find it (e.g. export PATH="$HOME/go/bin:$PATH")`);
+      }
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });
       else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
       else return fail(`${c.name}: no install route for ${h.platform}/${h.pkgManager ?? 'no package manager'}`);
