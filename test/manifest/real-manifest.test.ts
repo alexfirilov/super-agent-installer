@@ -8,7 +8,7 @@ const host = (platform: HostInfo['platform']) => ({ platform } as HostInfo);
 describe('manifest.json', () => {
   it('validates and contains the approved core', () => {
     const ids = m.components.map((c) => c.id);
-    for (const id of ['claude-code', 'codex-cli', 'node', 'git', 'uv', 'caveman-cli', 'playwright-cli', 'typescript-language-server', 'pyright', 'gopls', 'cp-superpowers', 'cp-caveman', 'cp-security-guidance', 'cp-context7', 'cp-commit-commands', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'cp-skill-creator', 'cp-feature-dev', 'cp-claude-md-management', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'cp-playwright', 'cp-remember', 'cp-plugin-dev', 'cp-pr-review-toolkit', 'cp-code-review', 'cp-code-simplifier', 'cp-ralph-loop', 'cp-claude-code-setup', 'sk-find-skills', 'sk-caveman-codex', 'sk-cc-devops', 'sk-linux-admin', 'sk-powershell-windows', 'mcp-cx-context7', 'mcp-cx-exa', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'sl-claude-hud', 'instr-global', 'set-codex-memories', 'set-windows-git-symlinks']) expect(ids, id).toContain(id);
+    for (const id of ['claude-code', 'codex-cli', 'node', 'git', 'uv', 'caveman-cli', 'playwright-cli', 'typescript-language-server', 'pyright', 'gopls', 'cp-superpowers', 'cp-caveman', 'cp-security-guidance', 'cp-context7', 'cp-commit-commands', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'cp-skill-creator', 'cp-feature-dev', 'cp-claude-md-management', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'cp-playwright', 'cp-remember', 'cp-plugin-dev', 'cp-pr-review-toolkit', 'cp-code-review', 'cp-code-simplifier', 'cp-ralph-loop', 'cp-claude-code-setup', 'sk-find-skills', 'sk-caveman-codex', 'sk-cc-devops', 'sk-linux-admin', 'sk-powershell-windows', 'mcp-cx-context7', 'mcp-cx-exa', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'sl-claude-hud', 'instr-global', 'set-codex-memories', 'set-windows-git-symlinks', 'ccusage', 'happy', 'agent-notifications', 'cx-remember']) expect(ids, id).toContain(id);
     expect(Object.keys(m.profiles).sort()).toEqual(['all', 'claude-only', 'codex-only', 'homelab', 'minimal', 'proxmox-host', 'work']);
   });
   it('profile all on linux has no slot conflicts, respects forceOff, stays under the token warning', () => {
@@ -17,6 +17,8 @@ describe('manifest.json', () => {
     expect(s.components.map((c) => c.id)).not.toContain('hook-caveman-codex');
     expect(s.components.map((c) => c.id)).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'cp-superpowers', 'cp-caveman', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'sk-cc-devops', 'sk-linux-admin', 'mcp-cx-context7', 'mcp-cx-exa', 'sl-caveman', 'hook-caveman-claude', 'instr-global']));
     expect(s.tokenTotals.claude).toBeLessThan(8000); expect(s.codexMcpCount).toBeLessThanOrEqual(5);
+    const allIds = s.components.map((c) => c.id);
+    for (const id of ['ccusage', 'happy', 'agent-notifications', 'cx-remember']) expect(allIds, id).not.toContain(id);
   });
   it('windows all includes powershell skill and excludes linux-only items', () => {
     const s = resolveSelection(m, host('windows'), { profile: 'all' }); const ids = s.components.map((c) => c.id);
