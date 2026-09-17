@@ -36,6 +36,7 @@ describe('planner', () => {
     expect(preview.actions.map((a) => `${a.componentId}:${a.op}:${a.description}`)).toEqual(['claude-code:install:install Claude Code', 'cp-x:install:install (after claude-code)']);
     expect(f.installed()).toBe(false);
     const ctx = makeTestCtx();
+    const early = await preview.actions[1]!.run(ctx); expect(early.ok).toBe(false); expect(early.message).toMatch(/still blocked: Claude Code not installed/); // agent not installed yet
     for (const a of preview.actions) expect((await a.run(ctx)).ok).toBe(true);
     expect(f.installed()).toBe(true);
   });

@@ -20,6 +20,7 @@ export async function planComponent(c: Component, ctx: Ctx, mode: Mode): Promise
 function deferredAction(c: Component, mode: Mode, after: string): Action {
   return action(c.id, 'install', `install (after ${after})`, async (ctx) => {
     const { actions } = await planComponent(c, ctx, mode);
+    if (actions.every((a) => a.op === 'skip' && a.blockedBy?.length)) return { ok: false, changed: false, message: `still blocked: ${actions.map((a) => a.description).join('; ')}` };
     const results = []; for (const a of actions) results.push(await a.run(ctx));
     return { ok: results.every((r) => r.ok), changed: results.some((r) => r.changed), message: results.map((r) => r.message).join('; ') };
   });
