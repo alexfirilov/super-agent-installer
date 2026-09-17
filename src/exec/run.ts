@@ -13,7 +13,12 @@ export function createRunner(o: { dryRun: boolean; log: Logger; env?: Record<str
       let stdout = '', stderr = '', done = false;
       const timer = opts.timeoutMs ? setTimeout(() => { if (!done) { child.kill(); reject(new RunError(`command timed out after ${opts.timeoutMs}ms: ${shown}`, { code: -1, stdout, stderr, skipped: false })); } }, opts.timeoutMs) : null;
       child.stdout.on('data', (d) => (stdout += d)); child.stderr.on('data', (d) => (stderr += d));
-      child.on('error', (e) => { done = true; if (timer) clearTimeout(timer); reject(new RunError(`failed to start ${shown}: ${e.message}`, { code: -1, stdout, stderr, skipped: false })); });
+      child.on('error', (e) => {
+        done = true; if (timer) clearTimeout(timer);
+        const result: RunResult = { code: -1, stdout, stderr, skipped: false };
+        const msg = `failed to start ${shown}: ${e.message}`;
+        if (opts.allowFailure) { o.log.debug(msg); resolve(result); } else { reject(new RunError(msg, result)); }
+      });
       child.on('close', (code) => {
         done = true; if (timer) clearTimeout(timer);
         const result: RunResult = { code: code ?? -1, stdout, stderr, skipped: false };

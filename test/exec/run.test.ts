@@ -12,6 +12,15 @@ describe('runner', () => {
     const run = createRunner({ dryRun: false, log: createLogger({}) });
     await expect(run([node, '-e', 'process.exit(2)'])).rejects.toThrow(/exit 2/);
   });
+  it('throws when the executable is missing', async () => {
+    const run = createRunner({ dryRun: false, log: createLogger({}) });
+    await expect(run(['sai-definitely-not-a-real-binary'])).rejects.toThrow(/failed to start/);
+  });
+  it('resolves instead of throwing when the executable is missing and allowFailure is set', async () => {
+    const run = createRunner({ dryRun: false, log: createLogger({}) });
+    const r = await run(['sai-definitely-not-a-real-binary'], { allowFailure: true });
+    expect(r).toMatchObject({ code: -1, stdout: '', stderr: '', skipped: false });
+  });
   it('skips mutating commands in dry-run but runs readOnly ones', async () => {
     const log = createLogger({});
     const run = createRunner({ dryRun: true, log });
