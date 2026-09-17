@@ -2,7 +2,7 @@ import type { Ctx, Kind, Mode, Selection, StepRecord } from './types.js';
 import { buildPlan, kindOrder, type Plan } from './planner.js';
 import { invalidateClaudeState } from './providers/claude-plugin.js';
 import { invalidateCodexState } from './providers/codex-plugin.js';
-import { extendPath } from './exec/path.js';
+import { extendPath, extendPathWith, readSystemPath } from './exec/path.js';
 export interface ExecOpts { onStep?: (rec: StepRecord) => void; afterEach?: () => void | Promise<void> }
 export interface ExecResult { records: StepRecord[]; failed: number; changed: number }
 export async function executePlan(plan: Plan, ctx: Ctx, opts: ExecOpts = {}): Promise<ExecResult> {
@@ -20,8 +20,13 @@ export async function executePlan(plan: Plan, ctx: Ctx, opts: ExecOpts = {}): Pr
 }
 /** Kinds whose actions put new binaries on disk: after each of their actions the agent state caches are dropped and PATH is extended so later groups see them. */
 export const REFRESH_AFTER: ReadonlySet<Kind> = new Set<Kind>(['tool', 'agent']);
-export function refreshEnvironment(ctx: Ctx): void {
+export async function refreshEnvironment(ctx: Ctx): Promise<void> {
   invalidateClaudeState(ctx); invalidateCodexState(ctx);
+  const registryPath = await readSystemPath(ctx);
+  if (registryPath.length) {
+    extendPathWith(ctx.host, process.env, registryPath);
+    if (ctx.env !== process.env) extendPathWith(ctx.host, ctx.env, registryPath);
+  }
   const added = extendPath(ctx.host, process.env);
   if (ctx.env !== process.env) extendPath(ctx.host, ctx.env);
   if (added.length) ctx.log.debug(`PATH += ${added.join(', ')}`);
