@@ -26,7 +26,7 @@ export async function detectHost(d: HostDeps): Promise<HostInfo> {
   const claudeRunning = /(^|\s)claude(\.exe)?(\s|$)/m.test(psOut);
   let diskFreeMb: number | null = null;
   if (platform !== 'windows') { const df = await d.run(['df', '-m', home], { readOnly: true, allowFailure: true }); const line = df.stdout.trim().split('\n').pop() ?? ''; const cols = line.split(/\s+/); const n = Number(cols[3]); diskFreeMb = Number.isFinite(n) ? n : null; }
-  else { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', `(Get-PSDrive -Name ($env:USERPROFILE.Substring(0,1))).Free / 1MB`], { readOnly: true, allowFailure: true }); const n = Number(r.stdout.trim()); diskFreeMb = Number.isFinite(n) ? Math.floor(n) : null; }
+  else { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', `(Get-PSDrive -Name ($env:USERPROFILE.Substring(0,1))).Free / 1MB`], { readOnly: true, allowFailure: true }); const s = r.stdout.trim(); const n = s ? Number(s) : NaN; diskFreeMb = r.code === 0 && Number.isFinite(n) ? Math.floor(n) : null; }
   let windowsDeveloperMode: boolean | null = null;
   if (platform === 'windows') { const r = await d.run(['reg.exe', 'query', 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock', '/v', 'AllowDevelopmentWithoutDevLicense'], { readOnly: true, allowFailure: true }); windowsDeveloperMode = r.code === 0 ? /0x1/.test(r.stdout) : false; }
   return {

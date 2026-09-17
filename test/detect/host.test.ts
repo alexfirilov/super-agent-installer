@@ -28,4 +28,16 @@ describe('detectHost', () => {
     const d = await detectHost(deps({ platform: 'darwin', bins: ['brew'] }));
     expect(d).toMatchObject({ platform: 'darwin', pkgManager: 'brew' });
   });
+  it('treats empty or failed windows disk probe output as unknown, not zero', async () => {
+    const failed = await detectHost(deps({
+      platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
+      run: async (argv) => argv[0] === 'powershell.exe' ? { code: 1, stdout: '', stderr: '', skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false },
+    }));
+    expect(failed.diskFreeMb).toBeNull();
+    const ok = await detectHost(deps({
+      platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
+      run: async (argv) => argv[0] === 'powershell.exe' ? { code: 0, stdout: '12345.6\n', stderr: '', skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false },
+    }));
+    expect(ok.diskFreeMb).toBe(12345);
+  });
 });
