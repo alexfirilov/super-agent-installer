@@ -6,8 +6,8 @@
       "name": "super-agent-installer",
       "dependencies": {
         "@clack/prompts": "^1.8.1",
-        "smol-toml": "^1.8.0",
-        "zod": "^4.6.5",
+        "smol-toml": "^1.6.0",
+        "zod": "^4.3.0",
       },
       "devDependencies": {
         "@types/node": "^22.20.3",
