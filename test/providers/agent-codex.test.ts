@@ -30,4 +30,25 @@ describe('codexAgentProvider', () => {
     await (await codexAgentProvider.plan(comp, win, null, 'install'))[0]!.run(win); expect(win.calls.find((a) => a[0] === 'powershell.exe')?.join(' ')).toContain('CODEX_NON_INTERACTIVE=1');
   });
   it('agentProvider dispatches by spec.agent', async () => { const ctx = makeTestCtx({ responses: { 'codex --version': 'codex-cli 0.154.0' } }); expect(await agentProvider.detect(comp, ctx)).toEqual({ version: '0.154.0' }); });
+  it('falls back to winget upgrade when codex is WinGet-owned, and fails the action if winget itself fails', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, fetch: fetchLatest('rust-v0.155.0'), responses: { 'codex update': { code: 1, stderr: 'Could not detect the Codex installation method' }, 'where.exe codex': 'C:\\Users\\u\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenAI.Codex\\codex.exe', 'winget upgrade --id OpenAI.Codex --silent --accept-source-agreements --accept-package-agreements': { code: 1, stderr: 'No applicable update found' } } });
+    const acts = await codexAgentProvider.plan(comp, ctx, { version: '0.154.0' }, 'update');
+    const r = await acts[0]!.run(ctx);
+    expect(ctx.calls.some((a) => a.join(' ').startsWith('winget upgrade --id OpenAI.Codex'))).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+  it('reruns the installer via powershell when codex is not WinGet-owned on windows, without calling winget', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, fetch: fetchLatest('rust-v0.155.0'), responses: { 'codex update': { code: 1, stderr: 'Could not detect the Codex installation method' }, 'where.exe codex': 'C:\\Users\\u\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe' } });
+    const acts = await codexAgentProvider.plan(comp, ctx, { version: '0.154.0' }, 'update');
+    const r = await acts[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.find((a) => a[0] === 'powershell.exe')?.join(' ')).toContain('CODEX_NON_INTERACTIVE=1');
+    expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
+  });
+  it('removes the npm conflict even when npm ls exits non-zero but still lists the package', async () => {
+    const ctx = makeTestCtx({ fetch: fetchLatest('rust-v0.154.0'), responses: { 'npm ls -g @openai/codex --depth=0 --json': { code: 1, stdout: JSON.stringify({ dependencies: { '@openai/codex': { version: '0.150.0' } } }) }, 'npm uninstall -g @openai/codex': '', 'codex sandbox -- /bin/true': '' } });
+    const acts = await codexAgentProvider.plan(comp, ctx, null, 'install');
+    await acts[0]!.run(ctx);
+    expect(ctx.calls).toContainEqual(['npm', 'uninstall', '-g', '@openai/codex']);
+  });
 });

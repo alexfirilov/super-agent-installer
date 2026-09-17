@@ -5,11 +5,12 @@ import { probeVersion } from '../detect/tools.js';
 import { latestCodex } from '../version/latest.js';
 import { isNewer } from '../version/compare.js';
 import { action, ok, fail } from './types.js';
+import { which, owner } from './agent-shared.js';
 const SH = 'curl -fsSL https://chatgpt.com/codex/install.sh | sh';
 const PS = '$env:CODEX_NON_INTERACTIVE=1; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm -UseBasicParsing https://chatgpt.com/codex/install.ps1 | iex';
 async function removeNpmConflict(ctx: Ctx): Promise<void> {
   const r = await ctx.run(['npm', 'ls', '-g', '@openai/codex', '--depth=0', '--json'], { readOnly: true, allowFailure: true });
-  if (r.code === 0 && /"@openai\/codex"/.test(r.stdout)) { ctx.log.warn('removing npm-installed @openai/codex so the native install wins on PATH'); await ctx.run(['npm', 'uninstall', '-g', '@openai/codex'], { allowFailure: true }); }
+  if (/"@openai\/codex"/.test(r.stdout)) { ctx.log.warn('removing npm-installed @openai/codex so the native install wins on PATH'); await ctx.run(['npm', 'uninstall', '-g', '@openai/codex'], { allowFailure: true }); }
 }
 async function runInstaller(ctx: Ctx): Promise<void> {
   const h = ctx.host;
@@ -48,7 +49,13 @@ export const codexAgentProvider: Provider = {
     return [action(c.id, 'update', `update Codex CLI ${installed.version} -> ${latest}`, async () => {
       const r = await ctx.run(['codex', 'update'], { allowFailure: true, timeoutMs: 600000 });
       if (r.code !== 0) {
-        if (/Could not detect/i.test(r.stderr + r.stdout)) { if (h.platform === 'windows' && h.pkgManager === 'winget') await ctx.run(['winget', 'upgrade', '--id', 'OpenAI.Codex', '--silent', '--accept-source-agreements', '--accept-package-agreements'], { allowFailure: true }); else await runInstaller(ctx); }
+        if (/Could not detect/i.test(r.stderr + r.stdout)) {
+          const o = owner(await which(ctx, 'codex'));
+          if (o === 'winget') {
+            const wr = await ctx.run(['winget', 'upgrade', '--id', 'OpenAI.Codex', '--silent', '--accept-source-agreements', '--accept-package-agreements'], { allowFailure: true });
+            if (wr.code !== 0) return fail(`winget upgrade failed: ${(wr.stderr || wr.stdout).trim()}`);
+          } else await runInstaller(ctx);
+        }
         else return fail(`codex update failed: ${(r.stderr || r.stdout).trim()}`);
       }
       return ok(`Codex CLI updated to ${latest}`);

@@ -41,4 +41,19 @@ describe('claudeAgentProvider', () => {
     const acts = await claudeAgentProvider.plan(comp, ctx, null, 'install'); await acts[0]!.run(ctx);
     const ps = ctx.calls.find((a) => a[0] === 'powershell.exe'); expect(ps?.join(' ')).toContain('-UseBasicParsing https://claude.ai/install.ps1'); expect(ps?.join(' ')).toContain(') latest');
   });
+  it('updates through apt-get when claude is owned by the apt package, not via claude update', async () => {
+    const ctx = makeTestCtx({ fetch: fetchLatest('2.1.274'), responses: { 'sh -c command -v claude': '/usr/bin/claude', 'apt-get update': '', 'apt-get install -y claude-code': '' } });
+    const acts = await claudeAgentProvider.plan(comp, ctx, { version: '2.1.273' }, 'update');
+    const r = await acts[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.some((a) => a.join(' ') === 'apt-get install -y claude-code')).toBe(true);
+    expect(ctx.calls.some((a) => a.join(' ') === 'claude update')).toBe(false);
+  });
+  it('updates through winget when claude is owned by a WinGet-managed install', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, fetch: fetchLatest('2.1.274'), responses: { 'where.exe claude': 'C:\\Users\\u\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode\\claude.exe' } });
+    const acts = await claudeAgentProvider.plan(comp, ctx, { version: '2.1.273' }, 'update');
+    const r = await acts[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.some((a) => a.join(' ').includes('winget upgrade --id Anthropic.ClaudeCode'))).toBe(true);
+  });
 });

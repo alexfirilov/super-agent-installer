@@ -6,9 +6,16 @@ import { latestClaude } from '../version/latest.js';
 import { isNewer } from '../version/compare.js';
 import { action, ok, fail } from './types.js';
 import { readJsonFile, writeJsonAtomic, backupFile, mergeClaudeSettings } from '../config/json.js';
-async function which(ctx: Ctx, cmd: string): Promise<string> { const r = await ctx.run(ctx.host.platform === 'windows' ? ['where.exe', cmd] : ['sh', '-c', `command -v ${cmd}`], { readOnly: true, allowFailure: true }); return r.code === 0 ? r.stdout.trim().split('\n')[0] ?? '' : ''; }
-function owner(path: string): 'apt' | 'brew' | 'winget' | 'native' { if (/^\/usr\/bin\//.test(path)) return 'apt'; if (/homebrew|\/usr\/local\/Caskroom/.test(path)) return 'brew'; if (/WinGet/i.test(path)) return 'winget'; return 'native'; }
-async function setChannel(ctx: Ctx): Promise<void> { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const next = mergeClaudeSettings(cur, { autoUpdatesChannel: ctx.channel }); if (JSON.stringify(next) !== JSON.stringify(cur)) { if (!ctx.dryRun) { await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir); await writeJsonAtomic(ctx.paths.claudeSettings, next); } } }
+import { which, owner } from './agent-shared.js';
+async function patchSettings(ctx: Ctx, patch: Record<string, unknown>): Promise<void> {
+  const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {};
+  const next = mergeClaudeSettings(cur, patch);
+  if (JSON.stringify(next) !== JSON.stringify(cur) && !ctx.dryRun) {
+    await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir);
+    await writeJsonAtomic(ctx.paths.claudeSettings, next);
+  }
+}
+async function setChannel(ctx: Ctx): Promise<void> { await patchSettings(ctx, { autoUpdatesChannel: ctx.channel }); }
 export const claudeAgentProvider: Provider = {
   kind: 'agent',
   async detect(_c, ctx) { const v = await probeVersion(ctx.run, ['claude', '--version']); return v ? { version: v } : null; },
@@ -37,7 +44,7 @@ export const claudeAgentProvider: Provider = {
         } else if (h.platform === 'darwin' && h.pkgManager === 'brew') { await ctx.run(['brew', 'install', '--cask', ctx.channel === 'latest' ? 'claude-code@latest' : 'claude-code']); }
         else if (h.platform === 'windows') { await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm -UseBasicParsing https://claude.ai/install.ps1))) ${ctx.channel}`], { timeoutMs: 600000 }); }
         else { await ctx.run(['bash', '-c', `curl -fsSL https://claude.ai/install.sh | bash -s ${ctx.channel}`], { timeoutMs: 600000 }); }
-        if (h.platform === 'linux' && h.isMusl) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; if (!ctx.dryRun) await writeJsonAtomic(ctx.paths.claudeSettings, mergeClaudeSettings(cur, { env: { USE_BUILTIN_RIPGREP: '0' } })); }
+        if (h.platform === 'linux' && h.isMusl) { await patchSettings(ctx, { env: { USE_BUILTIN_RIPGREP: '0' } }); }
         await setChannel(ctx);
         return ok(`Claude Code ${latest ?? ''} installed`);
       }, { from: null, to: latest })];
