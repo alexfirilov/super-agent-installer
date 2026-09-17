@@ -14,4 +14,11 @@ describe('lastJsonLine', () => {
     const out = 'nothing to see here\njust plain text';
     expect(lastJsonLine(out)).toBeNull();
   });
+  it('parses pretty-printed multi-line JSON with no surrounding noise (claude plugin list --json)', () => {
+    const out = '[\n  {\n    "id": "caveman@caveman",\n    "version": "15581d14007f"\n  }\n]\n';
+    expect(lastJsonLine(out)).toEqual([{ id: 'caveman@caveman', version: '15581d14007f' }]);
+  });
+  it('parses an empty JSON array', () => {
+    expect(lastJsonLine('[]\n')).toEqual([]);
+  });
 });
