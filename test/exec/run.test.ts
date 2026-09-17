@@ -39,5 +39,18 @@ describe('runner', () => {
     const run = createRunner({ dryRun: false, log: createLogger({}) });
     await expect(run([node, '-e', 'setTimeout(()=>{},5000)'], { timeoutMs: 200 })).rejects.toThrow(/timed out/);
   });
+  it('stops a command once its output matches stopOnOutput and reports stopped instead of timing out', async () => {
+    const run = createRunner({ dryRun: false, log: createLogger({}) });
+    const t0 = Date.now();
+    const r = await run([node, '-e', 'process.stdout.write("Added server.\\nDetected OAuth support. Starting OAuth flow\\n"); setTimeout(()=>{},10000)'], { timeoutMs: 8000, stopOnOutput: /Detected OAuth support/ });
+    expect(r).toMatchObject({ code: 0, skipped: false, stopped: true });
+    expect(r.stdout).toContain('Added server.');
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+  it('does not set stopped when stopOnOutput never matches', async () => {
+    const run = createRunner({ dryRun: false, log: createLogger({}) });
+    const r = await run([node, '-e', 'process.stdout.write("done")'], { stopOnOutput: /never/ });
+    expect(r).toMatchObject({ code: 0, stdout: 'done' }); expect(r.stopped).toBeFalsy();
+  });
   it('quotes argv for display', () => { expect(quoteArgv(['a', 'b c', "d'e"])).toBe(`a 'b c' 'd'\\''e'`); });
 });

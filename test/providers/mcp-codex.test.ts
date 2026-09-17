@@ -31,6 +31,20 @@ describe('mcpCodexProvider', () => {
     const r = await (await mcpCodexProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(r.message).toMatch(/startup_timeout_sec = 20/); expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toContain('# my comment');
   });
+  it('stops codex mcp add when Codex starts a browser OAuth flow for an http server and reports the login hint (real-host: codex 0.154 blocks forever on exa)', async () => {
+    const c = mcp({ name: 'exa', url: 'https://mcp.exa.ai/mcp' });
+    const ctx = ctxWith('', { 'codex mcp add exa --url https://mcp.exa.ai/mcp': "Added global MCP server 'exa'.\nDetected OAuth support. Starting OAuth flow…\nAuthorize `exa` by opening this URL in your browser:\nhttps://auth.exa.ai/oauth/authorize?x=y\n", 'codex mcp get exa --json': '{}' });
+    const r = await (await mcpCodexProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.changed).toBe(true);
+    expect(r.message).toMatch(/codex mcp login exa/);
+    expect(ctx.opts.find((o) => o.argv.join(' ').startsWith('codex mcp add exa'))?.opts.stopOnOutput).toBeInstanceOf(RegExp);
+  });
+  it('does not pass stopOnOutput for http servers with a bearer env var or for stdio servers', async () => {
+    const gh = mcp({ name: 'gh', url: 'https://x', bearerEnv: 'T' }); const c7 = mcp({ name: 'c7', transport: 'stdio', command: 'npx', args: ['x'] });
+    const ctx = ctxWith('', { 'codex mcp get gh --json': '{}', 'codex mcp get c7 --json': '{}' });
+    await (await mcpCodexProvider.plan(gh, ctx, null, 'install'))[0]!.run(ctx); await (await mcpCodexProvider.plan(c7, ctx, null, 'install'))[0]!.run(ctx);
+    for (const o of ctx.opts.filter((o) => o.argv[2] === 'add')) expect(o.opts.stopOnOutput).toBeUndefined();
+  });
   it('removes on uninstall and mcpProvider dispatches by target', async () => {
     const c = mcp({ name: 'gh', url: 'https://x' }); const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://x"\n', { 'codex mcp remove gh': '' });
     await (await mcpProvider.plan(c, ctx, await mcpProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx); expect(ctx.calls).toContainEqual(['codex', 'mcp', 'remove', 'gh']);

@@ -34,6 +34,28 @@ describe('claudePluginProvider', () => {
     const u = plugin('code-review', { action: 'uninstall' }); await (await claudePluginProvider.plan(u, ctx, await claudePluginProvider.detect(u, ctx), 'install'))[0]!.run(ctx);
     expect(ctx.calls.filter((a) => a[2] === 'uninstall')).toHaveLength(2);
   });
+  it('ignores plugin rows that belong to another project (found by real-host apply: code-review left a disabled project row for ~/proton-wireguard)', async () => {
+    const foreign = { id: 'code-review@claude-plugins-official', version: 'unknown', scope: 'project', enabled: false, projectPath: '/somewhere/else' };
+    const ctx = ctxWith(['claude-plugins-official'], [{ id: 'code-review@claude-plugins-official', version: '1', scope: 'user', enabled: true }, foreign], { 'claude plugin uninstall code-review@claude-plugins-official --scope user': '' });
+    const u = plugin('code-review', { action: 'uninstall' });
+    const inst = await claudePluginProvider.detect(u, ctx); expect(inst).toMatchObject({ details: { scopes: ['user'] } });
+    const r = await (await claudePluginProvider.plan(u, ctx, inst, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.message).toMatch(/\/somewhere\/else/);
+    expect(ctx.calls.filter((a) => a[2] === 'uninstall')).toEqual([['claude', 'plugin', 'uninstall', 'code-review@claude-plugins-official', '--scope', 'user']]);
+    // after the user-scope uninstall only the foreign row is left: not installed for us, and a second run is a no-op
+    expect(await claudePluginProvider.detect(u, ctx)).toBeNull();
+    expect(await claudePluginProvider.plan(u, ctx, null, 'install')).toEqual([]);
+    // and an install-wanted plugin that only exists in another project is treated as missing here
+    const want = plugin('code-review'); expect((await claudePluginProvider.plan(want, ctx, await claudePluginProvider.detect(want, ctx), 'install'))[0]).toMatchObject({ op: 'install' });
+  });
+  it('still addresses a project-scope row whose projectPath is the current directory', async () => {
+    const here = { id: 'code-review@claude-plugins-official', version: '1', scope: 'project', enabled: true, projectPath: process.cwd() };
+    const ctx = ctxWith(['claude-plugins-official'], [here], { 'claude plugin uninstall code-review@claude-plugins-official --scope project': '' });
+    const u = plugin('code-review', { action: 'uninstall' });
+    const inst = await claudePluginProvider.detect(u, ctx); expect(inst).toMatchObject({ details: { scopes: ['project'] } });
+    expect((await (await claudePluginProvider.plan(u, ctx, inst, 'install'))[0]!.run(ctx)).ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['claude', 'plugin', 'uninstall', 'code-review@claude-plugins-official', '--scope', 'project']);
+  });
   it('skips when Claude is not installed', async () => {
     const ctx = makeTestCtx({ responses: {} });
     const acts = await claudePluginProvider.plan(plugin('superpowers'), ctx, null, 'install'); expect(acts[0]).toMatchObject({ op: 'skip' });

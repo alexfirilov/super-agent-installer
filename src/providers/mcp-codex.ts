@@ -78,12 +78,15 @@ export const mcpCodexProvider: Provider = {
       const argv = ['codex', 'mcp', 'add', spec.name];
       if (resolved.transport === 'http') { argv.push('--url', resolved.url!); if (resolved.bearerEnv) argv.push('--bearer-token-env-var', resolved.bearerEnv); else if (!resolved.oauth && c.secrets?.length) ctx.log.warn(`${spec.name}: no bearer env var; if the server needs auth run: codex mcp login ${spec.name}`); }
       else { for (const [k, v] of Object.entries(resolved.env ?? {})) argv.push('--env', `${k}=${v}`); argv.push('--', resolved.command!, ...(resolved.args ?? [])); }
-      await ctx.run(argv, { timeoutMs: 120000 });
+      // Codex >= 0.154 probes an http server for OAuth right after writing its table and, when the server advertises it, blocks on a browser login (no opt-out flag). Stop it there: the table is already written and the user can log in later.
+      const oauthProbe = resolved.transport === 'http' && !resolved.bearerEnv;
+      const added = await ctx.run(argv, { timeoutMs: 120000, ...(oauthProbe ? { stopOnOutput: /Detected OAuth support/ } : {}) });
+      const loginHint = added.stopped ? ` Codex detected OAuth support on ${spec.name} and was stopped before opening a browser; if tool calls are rejected run: codex mcp login ${spec.name}` : '';
       const extra: Record<string, unknown> = { ...(spec.extra ?? {}) }; if (ENV_VARS_SUPPORTED && spec.secretEnv?.length) extra.env_vars = spec.secretEnv;
       let note = '';
       if (Object.keys(extra).length) { const r = await patchCodexTable(ctx, spec.name, extra); if (!r.applied) note = ` config.toml has comments, so extra keys were not written automatically. Add under [mcp_servers.${spec.name}]:\n${r.manual}`; }
       const chk = await ctx.run(['codex', 'mcp', 'get', spec.name, '--json'], { readOnly: true, allowFailure: true }); if (chk.code !== 0 && !ctx.dryRun) return fail(`codex cannot read ${spec.name} after write: ${(chk.stderr || chk.stdout).trim()}`);
-      return ok(`${spec.name} configured for Codex.${secretHints(c, ctx)}${note}`);
+      return ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`);
     })];
   },
 };
