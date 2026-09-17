@@ -1,0 +1,14 @@
+name: release
+on: { push: { tags: ['v*'] } }
+permissions: { contents: write, id-token: write, attestations: write }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile && bunx vitest run && bash scripts/build.sh
+      - uses: actions/attest-build-provenance@v3
+        with: { subject-path: 'release/*' }
+      - run: gh release create "${GITHUB_REF_NAME}" release/* install.sh install.ps1 --title "${GITHUB_REF_NAME}" --generate-notes
+        env: { GH_TOKEN: '${{ github.token }}' }

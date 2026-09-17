@@ -1,0 +1,5 @@
+FROM debian:13
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+COPY release/super-agent-installer-linux-x64 /usr/local/bin/super-agent-installer
+RUN chmod +x /usr/local/bin/super-agent-installer
+WORKDIR /root

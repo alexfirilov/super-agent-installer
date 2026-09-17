@@ -1,0 +1,42 @@
+name: ci
+on: { push: { branches: [main] }, pull_request: {} }
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bunx vitest run
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck bats
+      - run: shellcheck install.sh scripts/*.sh && bats test/bootstrap/install.bats
+  windows:
+    strategy: { matrix: { os: [windows-latest, windows-2022] } }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: Install-Module Pester -Force -SkipPublisherCheck; Install-Module PSScriptAnalyzer -Force; Invoke-Pester -Path test/bootstrap/install.Tests.ps1 -CI
+      - shell: powershell
+        run: |
+          $env:SAI_BASE_URL = "$env:TEMP\rel"; New-Item -ItemType Directory $env:SAI_BASE_URL -Force | Out-Null
+          [IO.File]::WriteAllText("$env:SAI_BASE_URL\super-agent-installer-windows-x64.exe", 'fake')
+          $h = (Get-FileHash -Algorithm SHA256 "$env:SAI_BASE_URL\super-agent-installer-windows-x64.exe").Hash.ToLower()
+          [IO.File]::WriteAllText("$env:SAI_BASE_URL\SHA256SUMS", "$h  super-agent-installer-windows-x64.exe`n")
+          $env:SAI_INSTALL_DIR = "$env:TEMP\bin"; $env:SAI_TEST_NO_PATH = '1'
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -NoRun
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile && bash scripts/build.sh
+      - run: bash scripts/docker-matrix.sh
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile && bunx vitest run

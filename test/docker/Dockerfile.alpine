@@ -1,0 +1,5 @@
+FROM alpine:3.21
+RUN apk add --no-cache bash curl ca-certificates libgcc libstdc++
+COPY release/super-agent-installer-linux-x64-musl /usr/local/bin/super-agent-installer
+RUN chmod +x /usr/local/bin/super-agent-installer
+WORKDIR /root
