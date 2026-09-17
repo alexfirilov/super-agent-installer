@@ -21,4 +21,9 @@ describe('hookProvider', () => {
     expect((await hookProvider.plan(hook('claude'), ctx, { version: null }, 'update'))[0]).toMatchObject({ op: 'update' });
     await (await hookProvider.plan(hook('claude'), ctx, { version: null }, 'uninstall'))[0]!.run(ctx); expect(ctx.calls).toContainEqual(['caveman', 'setup', '--agent-native', 'claude', '--remove']);
   });
+  it('surfaces a failed uninstall instead of reporting success', async () => {
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '1.3.4', 'caveman setup --agent-native claude --remove': { code: 1, stderr: 'boom' } } });
+    const r = await (await hookProvider.plan(hook('claude'), ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toContain('boom');
+  });
 });

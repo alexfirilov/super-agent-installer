@@ -25,6 +25,15 @@ describe('settingProvider', () => {
     expect(await settingProvider.detect(t, ctx)).toEqual({ version: null });
     await (await settingProvider.plan(t, ctx, { version: null }, 'uninstall'))[0]!.run(ctx); expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toBe('model = "x"\n');
   });
+  it('fails codex features uninstall when a toggle errors, but still attempts every toggle', async () => {
+    const ctx = makeTestCtx({ responses: { ...base, 'codex features enable memories': '', 'codex features enable other': '', 'codex features disable memories': { code: 1, stderr: 'boom' }, 'codex features disable other': '' } });
+    mkdirSync(ctx.paths.codexHome, { recursive: true }); writeFileSync(ctx.paths.codexConfig, 'model = "x"\n');
+    const f = setting('set-mem-fail', { target: 'codex', codexFeatures: { memories: true, other: true } });
+    await (await settingProvider.plan(f, ctx, null, 'install'))[0]!.run(ctx);
+    const r = await (await settingProvider.plan(f, ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toContain('memories');
+    expect(ctx.calls).toContainEqual(['codex', 'features', 'disable', 'memories']); expect(ctx.calls).toContainEqual(['codex', 'features', 'disable', 'other']);
+  });
   it('sets windows git config only on windows', async () => {
     const win = makeTestCtx({ host: { platform: 'windows' }, responses: { ...base, 'git config --global --get core.symlinks': { code: 1 }, 'git config --global core.symlinks true': '' } });
     const c = setting('set-symlinks', { target: 'claude', windowsGitConfig: { 'core.symlinks': 'true' } });

@@ -14,7 +14,11 @@ export const hookProvider: Provider = {
     if (c.spec.kind !== 'hook') return []; const agent = c.spec.agent;
     if (agent === 'codex' && ctx.host.platform === 'windows') return [skipAction(c.id, 'caveman Codex hooks are disabled on Windows (caveman docs/install-windows.md)')];
     if (!(await probeVersion(ctx.run, ['caveman', '--version']))) return [skipAction(c.id, 'caveman CLI not found; select the caveman-cli tool first')];
-    if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove caveman native hooks (${agent})`, async () => { await ctx.run(['caveman', 'setup', '--agent-native', agent, '--remove'], { allowFailure: true }); return ok('caveman hooks removed'); })] : [];
+    if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove caveman native hooks (${agent})`, async () => {
+      const r = await ctx.run(['caveman', 'setup', '--agent-native', agent, '--remove'], { allowFailure: true });
+      if (r.code !== 0) return fail(`caveman setup --agent-native ${agent} --remove failed: ${(r.stderr || r.stdout).trim()}`);
+      return ok('caveman hooks removed');
+    })] : [];
     if (installed && mode !== 'update') return [];
     return [action(c.id, installed ? 'update' : 'install', `caveman setup --agent-native ${agent}`, async () => {
       const r = await ctx.run(['caveman', 'setup', '--agent-native', agent], { allowFailure: true, timeoutMs: 300000 }); if (r.code !== 0) return fail(`caveman setup failed: ${(r.stderr || r.stdout).trim()}`);

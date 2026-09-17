@@ -21,4 +21,13 @@ describe('instructionsProvider', () => {
     await (await instructionsProvider.plan(comp, ctx, null, 'install'))[0]!.run(ctx);
     expect(readFileSync(ctx.paths.claudeMd, 'utf8')).toContain(MARKER_STYLES.html.start); expect(() => readFileSync(ctx.paths.codexAgentsMd)).toThrow();
   });
+  it('fails cleanly on an unknown bundled source instead of writing an empty block', async () => {
+    const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true }); writeFileSync(ctx.paths.claudeMd, '# my rules\n');
+    const bad: Component = { ...comp, id: 'instr-bad', spec: { kind: 'instructions', source: 'nope.md' } };
+    expect(await instructionsProvider.detect(bad, ctx)).toBeNull();
+    const acts = await instructionsProvider.plan(bad, ctx, null, 'install'); expect(acts).toHaveLength(1);
+    const r = await acts[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toContain("unknown instructions source 'nope.md'");
+    expect(readFileSync(ctx.paths.claudeMd, 'utf8')).toBe('# my rules\n');
+  });
 });

@@ -4,7 +4,7 @@ import { readJsonFile, writeJsonAtomic, backupFile, mergeClaudeSettings } from '
 import { readToml, writeTomlMarkerBlock, removeTomlMarkerBlock } from '../config/toml.js';
 import { getClaudeState } from './claude-plugin.js';
 import { getCodexState } from './codex-plugin.js';
-import { action, ok, skipAction } from './types.js';
+import { action, ok, fail, skipAction } from './types.js';
 
 const deepEq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function getPath(o: unknown, path: string[]): unknown { let cur = o; for (const k of path) { if (!cur || typeof cur !== 'object') return undefined; cur = (cur as Record<string, unknown>)[k]; } return cur; }
@@ -42,9 +42,15 @@ export const settingProvider: Provider = {
       if (!installed) return [];
       return [action(c.id, 'uninstall', `revert ${c.name}`, async () => {
         if (s.claudeSettings) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const next = { ...cur }; for (const [k, v] of Object.entries(s.claudeSettings)) if (v !== null && deepEq(cur[k], v)) delete next[k]; if (!ctx.dryRun) { await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir); await writeJsonAtomic(ctx.paths.claudeSettings, next); } }
-        for (const [k, v] of Object.entries(s.codexFeatures ?? {})) await ctx.run(['codex', 'features', v ? 'disable' : 'enable', k], { allowFailure: true });
+        const featureFailures: string[] = [];
+        for (const [k, v] of Object.entries(s.codexFeatures ?? {})) {
+          const op = v ? 'disable' : 'enable';
+          const r = await ctx.run(['codex', 'features', op, k], { allowFailure: true });
+          if (r.code !== 0) featureFailures.push(`codex features ${op} ${k} failed: ${(r.stderr || r.stdout).trim()}`);
+        }
         if (s.codexToml && !ctx.dryRun) await removeTomlMarkerBlock(ctx.paths.codexConfig, ctx.paths.backupsDir);
         // claudeJsonSeed is a one-time seed; uninstall never removes ~/.claude.json.
+        if (featureFailures.length) return fail(featureFailures.join('; '));
         return ok(`${c.name} reverted`);
       })];
     }
