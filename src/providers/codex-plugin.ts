@@ -3,6 +3,8 @@ import { detectCodex, type CodexState } from '../detect/agents.js';
 import { action, ok, fail, skipAction } from './types.js';
 import { lastJsonLine } from '../exec/json-output.js';
 const RESERVED = new Set(['openai-curated', 'openai-curated-remote', 'openai-api-curated']);
+const NOT_SIGNED_IN = 'Codex is not signed in (remote catalog needs a ChatGPT login)';
+function reservedButNotSignedIn(ctx: Ctx, marketplace: string): boolean { return RESERVED.has(marketplace) && ctx.auth?.codex?.mode !== 'chatgpt'; }
 const stateCache = new WeakMap<Ctx, Promise<CodexState>>();
 export function getCodexState(ctx: Ctx): Promise<CodexState> { let p = stateCache.get(ctx); if (!p) { p = detectCodex(ctx); stateCache.set(ctx, p); } return p; }
 export function invalidateCodexState(ctx: Ctx): void { stateCache.delete(ctx); }
@@ -30,15 +32,19 @@ export const codexPluginProvider: Provider = {
       st.plugins = st.plugins.filter((p) => p.id !== id);
       return ok(`${id} removed`);
     })] : [];
-    if (!installed) return [action(c.id, 'install', `install ${id}`, async () => {
-      await ensureCodexMarketplace(ctx, spec.marketplace, spec.marketplaceSource);
-      const r = await add(ctx, id);
-      if (!r.ok) return fail(`install ${id} failed: ${r.error}`);
-      const existing = st.plugins.find((p) => p.id === id);
-      if (existing) existing.version = r.version; else st.plugins.push({ id, version: r.version });
-      return ok(`${id} ${r.version ?? ''} installed`);
-    })];
+    if (!installed) {
+      if (reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli')];
+      return [action(c.id, 'install', `install ${id}`, async () => {
+        await ensureCodexMarketplace(ctx, spec.marketplace, spec.marketplaceSource);
+        const r = await add(ctx, id);
+        if (!r.ok) return fail(`install ${id} failed: ${r.error}`);
+        const existing = st.plugins.find((p) => p.id === id);
+        if (existing) existing.version = r.version; else st.plugins.push({ id, version: r.version });
+        return ok(`${id} ${r.version ?? ''} installed`);
+      })];
+    }
     if (mode !== 'update') return [];
+    if (reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli')];
     return [action(c.id, 'update', `update ${id}`, async () => {
       await upgradeMarketplace(ctx, spec.marketplace);
       const r = await add(ctx, id);

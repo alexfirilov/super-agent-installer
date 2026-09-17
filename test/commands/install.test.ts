@@ -72,3 +72,48 @@ describe('runInstall on a fresh host', () => {
     expect(logs[0]).toContain('install (after claude-code)');
   });
 });
+
+// Task 3: sign-in wiring in runInstall -- ensureAuth runs after the picker/plan preview and before promptSecrets,
+// only when not --dry-run and not --no-login, and only for agents this run's selection actually needs.
+const bothAgentsManifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [
+  kinded('claude-code', 'tool', { kind: 'tool', probe: ['claude-code'], packages: {} }, { agents: 'claude' }),
+  kinded('codex-cli', 'tool', { kind: 'tool', probe: ['codex-cli'], packages: {} }, { agents: 'codex' }),
+] };
+describe('runInstall sign-in wiring', () => {
+  it('signs both agents in when both agent components are selected and stores the result on ctx.auth', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest: bothAgentsManifest, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
+    expect(ctx.auth?.codex).toMatchObject({ authenticated: true, mode: 'chatgpt' });
+  });
+  it('does not sign in an agent that nothing in the selection needs', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('mcp-y', 'tool', { kind: 'tool', probe: ['y'], packages: {} }, { agents: 'claude' })] };
+    const ctx = makeTestCtx({ manifest });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    expect(ctx.auth).toBeUndefined();
+    expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
+  });
+  it('signs claude in when a claude-targeted component is selected and claude is already installed (not part of this run)', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
+    const ctx = makeTestCtx({ manifest, responses: { 'claude --version': 'claude 2.0.0', 'claude auth status': 'Logged in as demo@example.com' } });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
+  });
+  it('never signs in during --dry-run', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest: bothAgentsManifest, dryRun: true, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    expect(ctx.auth).toBeUndefined();
+    expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
+  });
+  it('never signs in when --no-login is passed, even outside --dry-run', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest: bothAgentsManifest, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true });
+    expect(ctx.auth).toBeUndefined();
+    expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
+  });
+});

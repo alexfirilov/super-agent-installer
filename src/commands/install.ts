@@ -1,11 +1,26 @@
-import type { Ctx, ProfileName } from '../types.js';
+import type { Component, Ctx, ProfileName } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
 import { executeGrouped } from '../executor.js';
 import { readState, writeState, buildState } from '../state/state.js';
 import { renderPlan, renderSummary, promptSecrets, postInstallHints } from './summary.js';
-export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string }
+import { ensureAuth, isHeadless } from '../auth/agents.js';
+import { probeVersion } from '../detect/tools.js';
+export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean }
 const NIX_SNIPPET = `NixOS detected. Use home-manager instead:\n  programs.claude-code.enable = true;\n  programs.codex.enable = true;\nSee https://home-manager-options.extranix.com/?query=claude-code`;
+/** Agents this run actually needs signed in: the agent-target excludes the other agent on at least one
+ * selected component, AND either the agent's own component is in the selection (it will exist by the
+ * time components run) or it is already installed on this host. Never signs in an agent nothing needs. */
+async function agentsToSignIn(ctx: Ctx, components: Component[]): Promise<Array<'claude' | 'codex'>> {
+  const agents: Array<'claude' | 'codex'> = [];
+  if (components.some((c) => c.agents !== 'codex')) {
+    if (components.some((c) => c.id === 'claude-code') || (await probeVersion(ctx.run, ['claude', '--version']))) agents.push('claude');
+  }
+  if (components.some((c) => c.agents !== 'claude')) {
+    if (components.some((c) => c.id === 'codex-cli') || (await probeVersion(ctx.run, ['codex', '--version']))) agents.push('codex');
+  }
+  return agents;
+}
 export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.isNixOS) { console.error(NIX_SNIPPET); return 4; }
   const state = await readState(ctx.paths.stateFile);
@@ -14,6 +29,13 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.claudeRunning) ctx.log.warn('a claude session is running; agent updates will be skipped and plugin changes need a restart');
   for (const e of sel.excluded) ctx.log.debug(`excluded ${e.id}: ${e.reason}`);
   ctx.log.info(`profile ${sel.profile}: ${sel.components.length} components, Claude always-on tokens ~${sel.tokenTotals.claude}, Codex MCP servers ${sel.codexMcpCount}`);
+  if (!ctx.dryRun && !o.noLogin) {
+    const agents = await agentsToSignIn(ctx, sel.components);
+    if (agents.length) {
+      const results = await ensureAuth(ctx, agents, { headless: isHeadless(ctx) });
+      ctx.auth = { ...ctx.auth, ...Object.fromEntries(results.map((r) => [r.agent, r])) };
+    }
+  }
   if (!ctx.dryRun) await promptSecrets(ctx, sel.components); // before planning: MCP specs substitute ${VAR} at plan time
   const preview = await buildPlan(sel, ctx, 'install', { preview: true });
   if (!o.json) console.log(renderPlan(preview.actions));
