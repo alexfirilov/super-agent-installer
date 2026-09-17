@@ -24,7 +24,7 @@ export const claudePluginProvider: Provider = {
   },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'claude-plugin') return []; const spec = c.spec; const id = `${spec.plugin}@${spec.marketplace}`;
-    const st = await getClaudeState(ctx); if (!st.installed) return [skipAction(c.id, 'Claude Code not installed')];
+    const st = await getClaudeState(ctx); if (!st.installed) return [skipAction(c.id, 'Claude Code not installed', 'claude-code')];
     const scopes = (installed?.details?.scopes as string[] | undefined) ?? ['user']; const enabled = (installed?.details?.enabled as boolean | undefined) ?? true;
     const act = spec.action ?? 'install';
     const uninstallAll = async () => {

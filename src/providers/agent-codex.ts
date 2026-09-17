@@ -6,6 +6,8 @@ import { latestCodex } from '../version/latest.js';
 import { isNewer } from '../version/compare.js';
 import { action, ok, fail } from './types.js';
 import { which, owner } from './agent-shared.js';
+import { memo } from '../exec/memo.js';
+const latest = (ctx: Ctx) => memo(ctx, 'codex', () => latestCodex(ctx.fetch));
 const SH = 'curl -fsSL https://chatgpt.com/codex/install.sh | sh';
 const PS = '$env:CODEX_NON_INTERACTIVE=1; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm -UseBasicParsing https://chatgpt.com/codex/install.ps1 | iex';
 async function removeNpmConflict(ctx: Ctx): Promise<void> {
@@ -28,7 +30,7 @@ async function sandboxNote(ctx: Ctx): Promise<string> {
 export const codexAgentProvider: Provider = {
   kind: 'agent',
   async detect(_c, ctx) { const v = await probeVersion(ctx.run, ['codex', '--version']); return v ? { version: v } : null; },
-  async latest(_c, ctx) { return latestCodex(ctx.fetch); },
+  async latest(_c, ctx) { return latest(ctx); },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'agent' || c.spec.agent !== 'codex') return [];
     const h = ctx.host;
@@ -43,10 +45,10 @@ export const codexAgentProvider: Provider = {
         return ok('Codex CLI removed');
       })];
     }
-    const latest = await latestCodex(ctx.fetch);
-    if (!installed) return [action(c.id, 'install', `install Codex CLI ${latest ?? ''}`, async () => { await removeNpmConflict(ctx); await runInstaller(ctx); return ok(`Codex CLI ${latest ?? ''} installed.${await sandboxNote(ctx)}`); }, { from: null, to: latest })];
-    if (!isNewer(latest, installed.version)) return [];
-    return [action(c.id, 'update', `update Codex CLI ${installed.version} -> ${latest}`, async () => {
+    const latestVersion = await latest(ctx);
+    if (!installed) return [action(c.id, 'install', `install Codex CLI ${latestVersion ?? ''}`, async () => { await removeNpmConflict(ctx); await runInstaller(ctx); return ok(`Codex CLI ${latestVersion ?? ''} installed.${await sandboxNote(ctx)}`); }, { from: null, to: latestVersion })];
+    if (!isNewer(latestVersion, installed.version)) return [];
+    return [action(c.id, 'update', `update Codex CLI ${installed.version} -> ${latestVersion}`, async () => {
       const r = await ctx.run(['codex', 'update'], { allowFailure: true, timeoutMs: 600000 });
       if (r.code !== 0) {
         if (/Could not detect/i.test(r.stderr + r.stdout)) {
@@ -58,7 +60,7 @@ export const codexAgentProvider: Provider = {
         }
         else return fail(`codex update failed: ${(r.stderr || r.stdout).trim()}`);
       }
-      return ok(`Codex CLI updated to ${latest}`);
-    }, { from: installed.version, to: latest })];
+      return ok(`Codex CLI updated to ${latestVersion}`);
+    }, { from: installed.version, to: latestVersion })];
   },
 };

@@ -2,12 +2,13 @@ import type { Action, ActionResult, Ctx, Op } from '../types.js';
 
 let counter = 0;
 
-export function action(componentId: string, op: Op, description: string, run: (ctx: Ctx) => Promise<ActionResult>, extra: { from?: string | null; to?: string | null } = {}): Action {
+export function action(componentId: string, op: Op, description: string, run: (ctx: Ctx) => Promise<ActionResult>, extra: { from?: string | null; to?: string | null; blockedBy?: string[] } = {}): Action {
   return { id: `${componentId}:${op}:${++counter}`, componentId, op, description, run, ...extra };
 }
 
-export function skipAction(componentId: string, reason: string): Action {
-  return action(componentId, 'skip', reason, async () => ({ ok: true, changed: false, message: reason }));
+/** A no-op action. `blockedBy` names the component ids whose install would unblock this one (e.g. the agent that is not installed yet); the planner uses it in preview mode. */
+export function skipAction(componentId: string, reason: string, blockedBy?: string | string[]): Action {
+  return action(componentId, 'skip', reason, async () => ({ ok: true, changed: false, message: reason }), blockedBy ? { blockedBy: Array.isArray(blockedBy) ? blockedBy : [blockedBy] } : {});
 }
 
 export const ok = (message: string, changed = true): ActionResult => ({ ok: true, changed, message });

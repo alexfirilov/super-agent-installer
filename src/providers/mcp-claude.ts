@@ -18,7 +18,7 @@ export const mcpClaudeProvider: Provider = {
   kind: 'mcp',
   async detect(c, ctx) { if (c.spec.kind !== 'mcp') return null; const st = await getClaudeState(ctx); if (!st.installed) return null; const cfg = st.mcp[c.spec.name]; return cfg ? { version: null, details: cfg as Record<string, unknown> } : null; },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
-    if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getClaudeState(ctx); if (!st.installed) return [skipAction(c.id, 'Claude Code not installed')];
+    if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getClaudeState(ctx); if (!st.installed) return [skipAction(c.id, 'Claude Code not installed', 'claude-code')];
     const remove = () => ctx.run(['claude', 'mcp', 'remove', '-s', 'user', spec.name], { allowFailure: true });
     if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove MCP ${spec.name} (Claude)`, async () => { await remove(); return ok(`${spec.name} removed`); })] : [];
     const desired = desiredClaudeMcp(spec, ctx.host.platform);

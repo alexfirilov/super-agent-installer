@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { parse, stringify } from 'smol-toml';
-import { setMarkerBlock, removeMarkerBlock } from './markers.js';
+import { MARKER_STYLES, removeMarkerBlock } from './markers.js';
 import { backupFile, writeTextAtomic } from './json.js';
 
 export class TomlError extends Error {}
@@ -21,10 +21,22 @@ export function tomlTableEquals(a: unknown, b: unknown): boolean {
   return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
 }
 
+/** Puts the managed block in front of the first top-level table header (else at the end): bare keys inside the block stay top-level instead of being
+ * parented under whatever `[table]` came last, and the block's own tables are closed by the user's next header. An existing block is moved if needed. */
+export function placeTomlMarkerBlock(text: string, block: string): string {
+  const { start, end } = MARKER_STYLES.hash;
+  const lines = removeMarkerBlock(text, 'hash').split('\n'); if (lines[lines.length - 1] === '') lines.pop();
+  const body = [start, ...block.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n'), end];
+  const idx = lines.findIndex((l) => /^\s*\[/.test(l));
+  if (idx === -1) return [...lines, ...(lines.length ? [''] : []), ...body].join('\n') + '\n';
+  const before = lines.slice(0, idx); while (before.length && before[before.length - 1] === '') before.pop();
+  return [...before, ...(before.length ? [''] : []), ...body, '', ...lines.slice(idx)].join('\n') + '\n';
+}
+
 export async function writeTomlMarkerBlock(path: string, keys: Record<string, unknown>, backupsDir: string): Promise<{ changed: boolean }> {
   let text = '';
   try { text = await readFile(path, 'utf8'); } catch { text = ''; }
-  const next = setMarkerBlock(text, stringify(keys).trim(), 'hash');
+  const next = placeTomlMarkerBlock(text, stringify(keys).trim());
   if (next === text.replace(/\r\n/g, '\n')) return { changed: false };
   try { parse(next); } catch (e) { throw new TomlError(`refusing to write ${path}: merged file does not parse (${(e as Error).message}). A key inside the managed block probably duplicates one outside it.`); }
   await backupFile(path, backupsDir);

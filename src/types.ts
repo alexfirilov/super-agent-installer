@@ -64,7 +64,7 @@ export interface Ctx {
 export interface Installed { version: string | null; details?: Record<string, unknown> }
 export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'configure';
 export interface ActionResult { ok: boolean; message: string; changed: boolean }
-export interface Action { id: string; componentId: string; op: Op; description: string; from?: string | null; to?: string | null; run: (ctx: Ctx) => Promise<ActionResult> }
+export interface Action { id: string; componentId: string; op: Op; description: string; from?: string | null; to?: string | null; blockedBy?: string[]; run: (ctx: Ctx) => Promise<ActionResult> }
 export type Mode = 'install' | 'update' | 'uninstall';
 export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
 export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }

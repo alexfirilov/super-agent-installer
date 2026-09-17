@@ -9,7 +9,9 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   const state = await readState(ctx.paths.stateFile);
   const target = ids?.length ? ids : state?.selectedIds ?? [];
   if (!target.length) { ctx.log.error('nothing to uninstall: pass component ids or install first'); return 1; }
-  const sel = resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: target });
+  // explicit ids only: never widen to the prerequisite closure (uninstall sk-x must not remove node)
+  const resolved = resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: target });
+  const wanted = new Set(target); const sel = { ...resolved, components: resolved.components.filter((c) => wanted.has(c.id)) };
   const plan = await buildPlan(sel, ctx, 'uninstall');
   if (!o.json) console.log(renderPlan(plan.actions));
   if (ctx.dryRun) return 0;

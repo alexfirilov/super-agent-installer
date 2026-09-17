@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { runInstall } from '../../src/commands/install.js';
 import { runUpdate } from '../../src/commands/update.js';
 import { registerProvider, clearProviders } from '../../src/providers/registry.js';
-import { action } from '../../src/providers/types.js';
+import { action, skipAction } from '../../src/providers/types.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component, Manifest, Provider } from '../../src/types.js';
 const comp = (id: string, ok = true): Component => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'tool', probe: [id], packages: {} } });
@@ -35,5 +35,40 @@ describe('runInstall / runUpdate', () => {
     let selfUpdated = false;
     expect(await runUpdate(ctx, { installerVersion: '0.1.0', selfUpdateFn: async () => { selfUpdated = true; return { updated: true, message: 'would update' }; } })).toBe(0);
     expect(selfUpdated).toBe(false);
+  });
+});
+
+// C1: a host without Claude/Codex/node must get agents AND their dependents in ONE run; --dry-run must execute nothing.
+const kinded = (id: string, kind: Component['kind'], spec: Component['spec'], extra: Partial<Component> = {}): Component => ({ id, name: id, kind, agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec, ...extra });
+const freshManifest: Manifest = { version: 1, profiles: { minimal: { description: '', base: 'none', include: ['claude-code', 'cp-x', 'mcp-y'] } }, components: [
+  kinded('claude-code', 'agent', { kind: 'agent', agent: 'claude' }),
+  kinded('cp-x', 'claude-plugin', { kind: 'claude-plugin', marketplace: 'm', plugin: 'x' }, { secrets: [{ env: 'X_TOKEN', prompt: 'token for x', required: false }] }),
+  kinded('mcp-y', 'mcp', { kind: 'mcp', target: 'claude', name: 'y', transport: 'http', url: 'https://y' }),
+] };
+function registerFreshHost() {
+  let agentInstalled = false; const ran: string[] = [];
+  registerProvider({ kind: 'agent', detect: async () => (agentInstalled ? { version: '2' } : null), latest: async () => '2', plan: async (c, _ctx, inst) => (inst ? [] : [action(c.id, 'install', 'install Claude Code', async () => { agentInstalled = true; ran.push(c.id); return { ok: true, changed: true, message: 'installed' }; }, { to: '2' })]) });
+  const dependent = (kind: Component['kind']): Provider => ({ kind, detect: async () => null, plan: async (c) => (agentInstalled ? [action(c.id, 'install', `install ${c.id}`, async () => { ran.push(c.id); return { ok: true, changed: true, message: 'done' }; })] : [skipAction(c.id, 'Claude Code not installed', 'claude-code')]) });
+  registerProvider(dependent('claude-plugin')); registerProvider(dependent('mcp'));
+  return { ran, installed: () => agentInstalled };
+}
+describe('runInstall on a fresh host', () => {
+  it('installs the agent and its dependents in one run and records them in state', async () => {
+    clearProviders(); const f = registerFreshHost();
+    const ctx = makeTestCtx({ manifest: freshManifest });
+    const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
+    try { expect(await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
+    expect(f.ran).toEqual(['claude-code', 'cp-x', 'mcp-y']);
+    const preview = logs[0] ?? ''; expect(preview).toContain('install (after claude-code)'); expect(preview).not.toContain('Claude Code not installed');
+    const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')); expect(Object.keys(state.installed).sort()).toEqual(['claude-code', 'cp-x', 'mcp-y']);
+    expect(logs.join('\n')).toContain('export X_TOKEN=<value>');
+  });
+  it('--dry-run shows the same one-run plan but executes nothing and writes no state', async () => {
+    clearProviders(); const f = registerFreshHost();
+    const ctx = makeTestCtx({ manifest: freshManifest, dryRun: true });
+    const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
+    try { expect(await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
+    expect(f.ran).toEqual([]); expect(f.installed()).toBe(false); expect(existsSync(ctx.paths.stateFile)).toBe(false);
+    expect(logs[0]).toContain('install (after claude-code)');
   });
 });

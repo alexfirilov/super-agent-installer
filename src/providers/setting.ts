@@ -36,8 +36,8 @@ export const settingProvider: Provider = {
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'setting') return []; const s = c.spec;
     if (s.windowsGitConfig && ctx.host.platform !== 'windows') return [];
-    if (s.target === 'claude' && !(await getClaudeState(ctx)).installed) return [skipAction(c.id, 'Claude Code not installed')];
-    if (s.target === 'codex' && !(await getCodexState(ctx)).installed) return [skipAction(c.id, 'Codex CLI not installed')];
+    if (s.target === 'claude' && !(await getClaudeState(ctx)).installed) return [skipAction(c.id, 'Claude Code not installed', 'claude-code')];
+    if (s.target === 'codex' && !(await getCodexState(ctx)).installed) return [skipAction(c.id, 'Codex CLI not installed', 'codex-cli')];
     if (mode === 'uninstall') {
       if (!installed) return [];
       return [action(c.id, 'uninstall', `revert ${c.name}`, async () => {

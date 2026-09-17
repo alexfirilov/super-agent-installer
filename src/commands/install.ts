@@ -1,7 +1,7 @@
 import type { Ctx, ProfileName } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
-import { executePlan } from '../executor.js';
+import { executeGrouped } from '../executor.js';
 import { readState, writeState, buildState } from '../state/state.js';
 import { renderPlan, renderSummary, promptSecrets, postInstallHints } from './summary.js';
 export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string }
@@ -14,12 +14,12 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.claudeRunning) ctx.log.warn('a claude session is running; agent updates will be skipped and plugin changes need a restart');
   for (const e of sel.excluded) ctx.log.debug(`excluded ${e.id}: ${e.reason}`);
   ctx.log.info(`profile ${sel.profile}: ${sel.components.length} components, Claude always-on tokens ~${sel.tokenTotals.claude}, Codex MCP servers ${sel.codexMcpCount}`);
-  const plan = await buildPlan(sel, ctx, 'install');
-  if (!o.json) console.log(renderPlan(plan.actions));
+  if (!ctx.dryRun) await promptSecrets(ctx, sel.components); // before planning: MCP specs substitute ${VAR} at plan time
+  const preview = await buildPlan(sel, ctx, 'install', { preview: true });
+  if (!o.json) console.log(renderPlan(preview.actions));
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
-  await promptSecrets(ctx, sel.components);
-  const result = await executePlan(plan, ctx);
+  const result = await executeGrouped(sel, ctx, 'install');
   if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
-  await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, plan.detections, o.installerVersion, ctx.channel));
+  await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
   return result.failed ? 1 : 0;
 }

@@ -27,5 +27,17 @@ export function postInstallHints(ctx: Ctx, components: Component[], records: Ste
   if (records.some((r) => r.componentId === 'codex-cli' && r.ok && r.changed)) hints.push('codex-cli: run `codex login` (or `codex login --device-auth` on headless hosts)');
   if (records.some((r) => /^hook-caveman-codex/.test(r.componentId) && r.ok && r.changed)) hints.push('codex: open Codex and run /hooks to trust the new hooks');
   if (ctx.host.claudeRunning) hints.push('restart running Claude Code sessions to pick up plugin and settings changes');
+  hints.push(...secretExportHints(ctx, components));
   return hints;
+}
+/** One `export VAR=<value>` / `setx VAR "<value>"` line per secret env of the selected components that is not in the ambient environment. Values typed at the prompt live in ctx.secrets and were used for this run only: the agents will not see them until the user exports them. */
+export function secretExportHints(ctx: Ctx, components: Component[]): string[] {
+  const w = ctx.host.platform === 'windows'; const seen = new Set<string>(); const out: string[] = [];
+  for (const c of components) for (const s of c.secrets ?? []) {
+    if (seen.has(s.env)) continue; seen.add(s.env);
+    const typed = ctx.secrets.has(s.env); if (!typed && ctx.env[s.env]) continue;
+    const line = w ? `setx ${s.env} "<value>"` : `export ${s.env}=<value>`;
+    out.push(`${line}  # ${s.prompt}${typed ? ' (the value you typed was used for this run only; export it so the agents can see it)' : s.required ? ' (required, not set)' : ' (optional, not set)'}`);
+  }
+  return out;
 }

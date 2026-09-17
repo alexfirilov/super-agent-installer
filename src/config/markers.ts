@@ -27,7 +27,8 @@ export function removeMarkerBlock(text: string, style: MarkerStyle): string {
   if (lines[lines.length - 1] === '') lines.pop();
   const loc = locate(lines, style);
   if (!loc) return lines.join('\n') + (lines.length ? '\n' : '');
-  const start = loc.s > 0 && lines[loc.s - 1] === '' ? loc.s - 1 : loc.s; // also drop the blank separator line we inserted
-  const out = [...lines.slice(0, start), ...lines.slice(loc.e + 1)];
+  let { s, e } = loc;
+  if (s > 0 && lines[s - 1] === '') s--; else if (lines[e + 1] === '') e++; // also drop the blank separator line we inserted (before the block, or after it when the block leads the file)
+  const out = [...lines.slice(0, s), ...lines.slice(e + 1)];
   return out.join('\n') + (out.length ? '\n' : '');
 }

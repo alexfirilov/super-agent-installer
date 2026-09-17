@@ -7,6 +7,8 @@ import { isNewer } from '../version/compare.js';
 import { action, ok, fail } from './types.js';
 import { readJsonFile, writeJsonAtomic, backupFile, mergeClaudeSettings } from '../config/json.js';
 import { which, owner } from './agent-shared.js';
+import { memo } from '../exec/memo.js';
+const latest = (ctx: Ctx) => memo(ctx, `claude:${ctx.channel}`, () => latestClaude(ctx.fetch, ctx.channel));
 async function patchSettings(ctx: Ctx, patch: Record<string, unknown>): Promise<void> {
   const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {};
   const next = mergeClaudeSettings(cur, patch);
@@ -19,10 +21,10 @@ async function setChannel(ctx: Ctx): Promise<void> { await patchSettings(ctx, { 
 export const claudeAgentProvider: Provider = {
   kind: 'agent',
   async detect(_c, ctx) { const v = await probeVersion(ctx.run, ['claude', '--version']); return v ? { version: v } : null; },
-  async latest(_c, ctx) { return latestClaude(ctx.fetch, ctx.channel); },
+  async latest(_c, ctx) { return latest(ctx); },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'agent' || c.spec.agent !== 'claude') return [];
-    const h = ctx.host; const latest = mode === 'uninstall' ? null : await latestClaude(ctx.fetch, ctx.channel);
+    const h = ctx.host; const latestVersion = mode === 'uninstall' ? null : await latest(ctx);
     if (mode === 'uninstall') {
       if (!installed) return [];
       return [action(c.id, 'uninstall', 'remove Claude Code', async () => {
@@ -46,11 +48,11 @@ export const claudeAgentProvider: Provider = {
         else { await ctx.run(['bash', '-c', `curl -fsSL https://claude.ai/install.sh | bash -s ${ctx.channel}`], { timeoutMs: 600000 }); }
         if (h.platform === 'linux' && h.isMusl) { await patchSettings(ctx, { env: { USE_BUILTIN_RIPGREP: '0' } }); }
         await setChannel(ctx);
-        return ok(`Claude Code ${latest ?? ''} installed`);
-      }, { from: null, to: latest })];
+        return ok(`Claude Code ${latestVersion ?? ''} installed`);
+      }, { from: null, to: latestVersion })];
     }
-    if (!isNewer(latest, installed.version)) return [];
-    return [action(c.id, 'update', `update Claude Code ${installed.version} -> ${latest}`, async () => {
+    if (!isNewer(latestVersion, installed.version)) return [];
+    return [action(c.id, 'update', `update Claude Code ${installed.version} -> ${latestVersion}`, async () => {
       if (h.claudeRunning) return fail('a claude session is running; close it and rerun (claude update silently no-ops while the lock is held)');
       const o = owner(await which(ctx, 'claude'));
       if (o === 'apt') { await ctx.run(['apt-get', 'update']); await ctx.run(['apt-get', 'install', '-y', 'claude-code']); }
@@ -58,7 +60,7 @@ export const claudeAgentProvider: Provider = {
       else if (o === 'winget') await ctx.run(['winget', 'upgrade', '--id', 'Anthropic.ClaudeCode', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
       else { const r = await ctx.run(['claude', 'update'], { timeoutMs: 600000, allowFailure: true }); if (r.code !== 0) return fail(`claude update failed: ${r.stderr.trim() || r.stdout.trim()}`); }
       await setChannel(ctx);
-      return ok(`Claude Code updated to ${latest}`);
-    }, { from: installed.version, to: latest })];
+      return ok(`Claude Code updated to ${latestVersion}`);
+    }, { from: installed.version, to: latestVersion })];
   },
 };

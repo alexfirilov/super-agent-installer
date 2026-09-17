@@ -6,6 +6,7 @@ import { latestNpm, latestGithubRelease } from '../version/latest.js';
 import { isNewer, normalizeVersion } from '../version/compare.js';
 import { NODE_MAJOR } from '../pins.js';
 import { action, ok, fail } from './types.js';
+import { memo } from '../exec/memo.js';
 
 function sudo(ctx: Ctx, argv: string[]): string[] | null {
   if (ctx.host.isRoot) return argv;
@@ -73,8 +74,9 @@ async function installNode(ctx: Ctx): Promise<string | null> {
 
 async function toolLatest(c: Component, ctx: Ctx): Promise<string | null> {
   if (c.spec.kind !== 'tool') return null;
-  if (c.spec.latest?.npm) return latestNpm(ctx.fetch, c.spec.latest.npm);
-  if (c.spec.latest?.github) return latestGithubRelease(ctx.fetch, c.spec.latest.github);
+  const spec = c.spec;
+  if (spec.latest?.npm) return memo(ctx, `npm:${spec.latest.npm}`, () => latestNpm(ctx.fetch, spec.latest!.npm!));
+  if (spec.latest?.github) return memo(ctx, `github:${spec.latest.github}`, () => latestGithubRelease(ctx.fetch, spec.latest!.github!));
   return null;
 }
 

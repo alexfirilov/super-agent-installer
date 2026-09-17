@@ -83,7 +83,7 @@ export const mcpCodexProvider: Provider = {
   kind: 'mcp',
   async detect(c, ctx) { if (c.spec.kind !== 'mcp') return null; const st = await getCodexState(ctx); if (!st.installed) return null; const t = st.mcp[c.spec.name]; return t ? { version: null, details: t } : null; },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
-    if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getCodexState(ctx); if (!st.installed) return [skipAction(c.id, 'Codex CLI not installed')];
+    if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getCodexState(ctx); if (!st.installed) return [skipAction(c.id, 'Codex CLI not installed', 'codex-cli')];
     if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove MCP ${spec.name} (Codex)`, async () => { await ctx.run(['codex', 'mcp', 'remove', spec.name], { allowFailure: true }); return ok(`${spec.name} removed`); })] : [];
     const op = installed ? 'configure' : 'install';
     let resolved: McpSpec;

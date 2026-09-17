@@ -1,6 +1,11 @@
-import type { Ctx, StepRecord } from './types.js';
-import type { Plan } from './planner.js';
-export async function executePlan(plan: Plan, ctx: Ctx, opts: { onStep?: (rec: StepRecord) => void } = {}): Promise<{ records: StepRecord[]; failed: number; changed: number }> {
+import type { Ctx, Kind, Mode, Selection, StepRecord } from './types.js';
+import { buildPlan, kindOrder, type Plan } from './planner.js';
+import { invalidateClaudeState } from './providers/claude-plugin.js';
+import { invalidateCodexState } from './providers/codex-plugin.js';
+import { extendPath } from './exec/path.js';
+export interface ExecOpts { onStep?: (rec: StepRecord) => void; afterEach?: () => void | Promise<void> }
+export interface ExecResult { records: StepRecord[]; failed: number; changed: number }
+export async function executePlan(plan: Plan, ctx: Ctx, opts: ExecOpts = {}): Promise<ExecResult> {
   const records: StepRecord[] = [];
   for (const a of plan.actions) {
     ctx.log.step(`${a.op.padEnd(9)} ${a.description}`);
@@ -9,6 +14,28 @@ export async function executePlan(plan: Plan, ctx: Ctx, opts: { onStep?: (rec: S
     catch (e) { rec = { componentId: a.componentId, op: a.op, ok: false, changed: false, message: (e as Error).message, from: a.from ?? null, to: a.to ?? null }; }
     if (!rec.ok) ctx.log.error(`${a.componentId}: ${rec.message}`); else if (rec.changed) ctx.log.info(`${a.componentId}: ${rec.message}`); else ctx.log.debug(`${a.componentId}: ${rec.message}`);
     records.push(rec); opts.onStep?.(rec);
+    if (rec.op !== 'skip') await opts.afterEach?.();
   }
   return { records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length };
+}
+/** Kinds whose actions put new binaries on disk: after each of their actions the agent state caches are dropped and PATH is extended so later groups see them. */
+export const REFRESH_AFTER: ReadonlySet<Kind> = new Set<Kind>(['tool', 'agent']);
+export function refreshEnvironment(ctx: Ctx): void {
+  invalidateClaudeState(ctx); invalidateCodexState(ctx);
+  const added = extendPath(ctx.host, process.env);
+  if (ctx.env !== process.env) extendPath(ctx.host, ctx.env);
+  if (added.length) ctx.log.debug(`PATH += ${added.join(', ')}`);
+}
+/** Real runs: plan and execute one KIND_ORDER group at a time, so plugins/MCP/skills are planned only after the agents and tools they need exist. */
+export async function executeGrouped(sel: Selection, ctx: Ctx, mode: Mode, opts: { onStep?: (rec: StepRecord) => void; refresh?: (ctx: Ctx) => void | Promise<void> } = {}): Promise<ExecResult & { plan: Plan }> {
+  const refresh = opts.refresh ?? refreshEnvironment;
+  const plan: Plan = { actions: [], detections: {} }; const records: StepRecord[] = [];
+  for (const kind of kindOrder(mode)) {
+    const components = sel.components.filter((c) => c.kind === kind); if (!components.length) continue;
+    const group = await buildPlan({ ...sel, components }, ctx, mode);
+    plan.actions.push(...group.actions); Object.assign(plan.detections, group.detections);
+    const r = await executePlan(group, ctx, { onStep: opts.onStep, afterEach: REFRESH_AFTER.has(kind) ? () => refresh(ctx) : undefined });
+    records.push(...r.records);
+  }
+  return { plan, records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length };
 }

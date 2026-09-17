@@ -56,4 +56,17 @@ describe('runUninstall', () => {
     expect(state.installed.b.version).toBe('1');
     expect(state.installed.a).toBeUndefined();
   });
+
+  it('uninstall <id> removes only the named component, never its prerequisites (uninstall sk-x must not plan removing node)', async () => {
+    clearProviders(); registerProvider(fakeProvider({ node: 'ok', 'sk-x': 'ok' }));
+    registerProvider({ ...fakeProvider({ node: 'ok', 'sk-x': 'ok' }), kind: 'skill' });
+    const chain: Manifest = { version: 1, profiles: {}, components: [comp('node'), { ...comp('sk-x'), kind: 'skill', prerequisites: ['node'], spec: { kind: 'skill', repo: 'a/b', skills: ['x'], targets: ['codex'] } }] };
+    const ctx = makeTestCtx({ manifest: chain }); ctx.yes = true;
+    await writeState(ctx.paths.stateFile, initialState(['node', 'sk-x'], { node: { version: '1', at: 't' }, 'sk-x': { version: '1', at: 't' } }));
+    const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
+    try { expect(await runUninstall(ctx, ['sk-x'], { installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
+    expect(logs[0]).not.toMatch(/remove node/); expect(logs[0]).toMatch(/remove sk-x/);
+    const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8'));
+    expect(state.selectedIds).toEqual(['node']); expect(state.installed.node.version).toBe('1'); expect(state.installed['sk-x']).toBeUndefined();
+  });
 });

@@ -19,7 +19,7 @@ export const skillProvider: Provider = {
   },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'skill') return []; const spec = c.spec;
-    if (!(await probeVersion(ctx.run, ['node', '--version']))) return [skipAction(c.id, 'Node.js is required for the skills CLI (select the node tool)')];
+    if (!(await probeVersion(ctx.run, ['node', '--version']))) return [skipAction(c.id, 'Node.js is required for the skills CLI (select the node tool)', 'node')];
     const named = spec.skills === '*' ? null : spec.skills;
     if (mode === 'uninstall') {
       if (!installed) return [];

@@ -13,7 +13,7 @@ export const hookProvider: Provider = {
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'hook') return []; const agent = c.spec.agent;
     if (agent === 'codex' && ctx.host.platform === 'windows') return [skipAction(c.id, 'caveman Codex hooks are disabled on Windows (caveman docs/install-windows.md)')];
-    if (!(await probeVersion(ctx.run, ['caveman', '--version']))) return [skipAction(c.id, 'caveman CLI not found; select the caveman-cli tool first')];
+    if (!(await probeVersion(ctx.run, ['caveman', '--version']))) return [skipAction(c.id, 'caveman CLI not found; select the caveman-cli tool first', 'caveman-cli')];
     if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove caveman native hooks (${agent})`, async () => {
       const r = await ctx.run(['caveman', 'setup', '--agent-native', agent, '--remove'], { allowFailure: true });
       if (r.code !== 0) return fail(`caveman setup --agent-native ${agent} --remove failed: ${(r.stderr || r.stdout).trim()}`);
