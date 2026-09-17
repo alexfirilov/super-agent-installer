@@ -41,7 +41,7 @@ export const claudeAgentProvider: Provider = {
         if (h.platform === 'linux' && (h.isProxmoxHost || h.isRoot) && h.pkgManager === 'apt') {
           await ctx.run(['install', '-d', '-m', '0755', '/etc/apt/keyrings']);
           await ctx.run(['bash', '-c', 'curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyrings/claude-code.asc']);
-          await ctx.run(['bash', '-c', `printf 'deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/${ctx.channel} stable main\\n' > /etc/apt/sources.list.d/claude-code.list`]);
+          await ctx.run(['bash', '-c', `printf 'deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/${ctx.channel} ${ctx.channel} main\\n' > /etc/apt/sources.list.d/claude-code.list`]);
           await ctx.run(['apt-get', 'update']); await ctx.run(['apt-get', 'install', '-y', 'claude-code']);
         } else if (h.platform === 'darwin' && h.pkgManager === 'brew') { await ctx.run(['brew', 'install', '--cask', ctx.channel === 'latest' ? 'claude-code@latest' : 'claude-code']); }
         else if (h.platform === 'windows') { await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm -UseBasicParsing https://claude.ai/install.ps1))) ${ctx.channel}`], { timeoutMs: 600000 }); }

@@ -18,6 +18,14 @@ function split(pkg: string): string[] {
   return pkg.split(/\s+/).filter(Boolean);
 }
 
+const aptUpdated = new WeakSet<Ctx>();
+/** Fresh hosts often have empty or stale apt lists ("Unable to locate package git"): refresh once per run before the first apt install. */
+async function aptUpdateOnce(ctx: Ctx, cmd: string[]): Promise<void> {
+  if (!cmd.includes('apt-get') || aptUpdated.has(ctx)) return;
+  aptUpdated.add(ctx);
+  await ctx.run(sudo(ctx, ['apt-get', 'update']) ?? ['apt-get', 'update'], { allowFailure: true, timeoutMs: 600000 });
+}
+
 function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo' {
   const pm = ctx.host.pkgManager;
   const s = (argv: string[]) => sudo(ctx, argv) ?? 'nosudo';
@@ -130,7 +138,9 @@ export const toolProvider: Provider = {
     }
 
     const latest = await toolLatest(c, ctx);
-    const needsNodeUpgrade = spec.strategy === 'node' && !!installed?.version && Number(normalizeVersion(installed.version)?.split('.')[0]) < NODE_MAJOR;
+    // root + apk installs the distro's nodejs package (alpine 3.21 ships 22): that is the best that route offers, so an older major is not re-planned every run
+    const distroPinned = h.isRoot && h.pkgManager === 'apk';
+    const needsNodeUpgrade = spec.strategy === 'node' && !distroPinned && !!installed?.version && Number(normalizeVersion(installed.version)?.split('.')[0]) < NODE_MAJOR;
     if (installed && mode !== 'install' && !isNewer(latest, installed.version) && !needsNodeUpgrade) return [];
     if (installed && mode === 'install' && !needsNodeUpgrade) return [];
     const op = installed ? 'update' : 'install';
@@ -143,7 +153,7 @@ export const toolProvider: Provider = {
       const p = spec.packages;
       const cmd = pmInstall(ctx, p);
       if (cmd === 'nosudo') return fail(`${c.name}: needs root or sudo to use ${h.pkgManager}; install it manually or rerun as root`);
-      if (cmd) await ctx.run(cmd, { timeoutMs: 600000 });
+      if (cmd) { await aptUpdateOnce(ctx, cmd); await ctx.run(cmd, { timeoutMs: 600000 }); }
       else if (p.npm) await npmGlobal(ctx, p.npm);
       else if (p.go) await ctx.run(['go', 'install', p.go.includes('@') ? p.go : `${p.go}@latest`], { timeoutMs: 600000 });
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });

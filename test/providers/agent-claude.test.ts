@@ -20,6 +20,8 @@ describe('claudeAgentProvider', () => {
     const ctx = makeTestCtx({ host: { isProxmoxHost: true, isRoot: true, pkgManager: 'apt' }, fetch: fetchLatest('2.1.274'), responses: { 'apt-get update': '', 'apt-get install -y claude-code': '' } });
     const acts = await claudeAgentProvider.plan(comp, ctx, null, 'install'); await acts[0]!.run(ctx);
     expect(ctx.calls.some((a) => a.includes('apt-get') && a.includes('claude-code'))).toBe(true);
+    // the suite name follows the channel (docs: apt/latest latest main, apt/stable stable main); "apt/latest stable" has no Release file
+    expect(ctx.calls.some((a) => a[0] === 'bash' && /apt\/latest latest main/.test(a[2] ?? ''))).toBe(true);
     expect(ctx.calls.some((a) => a.join(' ').includes('install.sh'))).toBe(false);
   });
   it('warns but proceeds without AVX on linux', async () => {

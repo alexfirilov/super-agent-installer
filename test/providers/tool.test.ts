@@ -11,6 +11,10 @@ describe('toolProvider', () => {
     const ctx = makeTestCtx({ responses: { 'sudo apt-get install -y jq': '' } });
     const r = await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq', winget: 'jqlang.jq' } }), ctx, null, 'install'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(ctx.calls).toContainEqual(['sudo', 'apt-get', 'install', '-y', 'jq']);
+    // apt lists may be empty/stale on a fresh host (docker matrix: "Unable to locate package git"): refresh once per run, before the first install
+    expect(ctx.calls.findIndex((a) => a.join(' ') === 'sudo apt-get update')).toBeLessThan(ctx.calls.findIndex((a) => a.join(' ') === 'sudo apt-get install -y jq'));
+    await (await toolProvider.plan(tool('git', { packages: { apt: 'git' } }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(ctx.calls.filter((a) => a.join(' ') === 'sudo apt-get update')).toHaveLength(1);
   });
   it('fails clearly without root or sudo', async () => {
     const ctx = makeTestCtx({ host: { hasSudo: false } });
@@ -39,6 +43,9 @@ describe('toolProvider', () => {
   it('plans node update when installed major is below 24', async () => {
     const ctx = makeTestCtx();
     const acts = await toolProvider.plan(tool('node', { strategy: 'node' }), ctx, { version: '22.22.1' }, 'update'); expect(acts[0]).toMatchObject({ op: 'update' });
+    // distro-pinned route (root + apk): the repo node is what we can get; do not re-plan an update on every run (docker matrix: alpine 3.21 ships 22)
+    const apk = makeTestCtx({ host: { isRoot: true, hasSudo: false, pkgManager: 'apk', isMusl: true } });
+    expect(await toolProvider.plan(tool('node', { strategy: 'node' }), apk, { version: '22.23.2' }, 'update')).toEqual([]);
     expect(await toolProvider.plan(tool('node', { strategy: 'node' }), ctx, { version: '24.19.0' }, 'update')).toEqual([]);
   });
   it('updates npm tools when the registry is newer', async () => {
