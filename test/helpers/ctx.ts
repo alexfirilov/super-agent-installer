@@ -1,11 +1,11 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Ctx, HostInfo, Manifest, Runner } from '../../src/types.js';
+import type { Ctx, HostInfo, Logger, Manifest, Runner } from '../../src/types.js';
 import { resolvePaths } from '../../src/config/paths.js';
 import { createLogger } from '../../src/ui/log.js';
 export interface FakeOpts { responses?: Record<string, string | { code: number; stdout?: string; stderr?: string }>; env?: Record<string, string>; host?: Partial<HostInfo>; dryRun?: boolean; manifest?: Manifest; fetch?: typeof fetch; secrets?: Record<string, string> }
-export function makeTestCtx(o: FakeOpts = {}): Ctx & { calls: string[][] } {
+export function makeTestCtx(o: FakeOpts = {}): Ctx & { calls: string[][]; log: Logger & { lines: string[] } } {
   const calls: string[][] = [];
   const run: Runner = async (argv, opts = {}) => {
     calls.push(argv); const key = argv.join(' '); const r = o.responses?.[key];
