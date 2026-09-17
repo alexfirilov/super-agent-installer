@@ -15,7 +15,7 @@ Windows (PowerShell 5.1 or 7):
 Unattended:
 
     curl -fsSL .../install.sh | bash -s -- --yes --profile homelab
-    irm .../install.ps1 | iex; super-agent-installer --yes --profile work
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1))) --yes --profile work
 
 Proxmox host (root, no sudo):
 

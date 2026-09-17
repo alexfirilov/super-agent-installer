@@ -4,7 +4,6 @@
         & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1))) -NoRun
 #>
 [CmdletBinding()]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', 'node', Justification = 'node is an optional external tool used only for the npx fallback; its presence is checked at runtime via Get-Command, not a PowerShell command needing version-compatibility validation.')]
 param([switch]$NoRun, [Parameter(ValueFromRemainingArguments = $true)][string[]]$RestArgs)
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -20,7 +19,7 @@ function Say([string]$m) { Write-Host "super-agent-installer: $m" }
 function Fail([string]$m) { Write-Host "super-agent-installer: $m"; exit 1 }
 
 $archRaw = if ($env:SAI_TEST_ARCH) { $env:SAI_TEST_ARCH } else { $env:PROCESSOR_ARCHITECTURE }
-$arch = switch ($archRaw) { 'AMD64' { 'x64' } 'ARM64' { 'arm64' } default { Fail "unsupported architecture: $archRaw" } }
+$arch = switch ($archRaw) { 'AMD64' { 'x64' } 'ARM64' { Fail 'no windows-arm64 build yet (use WSL and install.sh on this machine)' } default { Fail "unsupported architecture: $archRaw" } }
 $asset = "super-agent-installer-windows-$arch.exe"
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("sai-" + [Guid]::NewGuid().ToString())
@@ -34,14 +33,7 @@ function Get-Asset([string]$name, [string]$dest) {
 try {
   Say "downloading $asset v$version"
   try { Get-Asset $asset (Join-Path $tmp $asset); Get-Asset 'SHA256SUMS' (Join-Path $tmp 'SHA256SUMS') }
-  catch {
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if ($node) {
-      $major = [int]((& node -p 'process.versions.node.split(".")[0]'))
-      if ($major -ge 22) { Say 'binary download failed; falling back to npx'; & npx --yes "super-agent-installer@$version" @RestArgs; exit $LASTEXITCODE }
-    }
-    Fail "download failed: $($_.Exception.Message)"
-  }
+  catch { Fail "download failed: $($_.Exception.Message). Retry, or download $asset and SHA256SUMS from https://github.com/$repo/releases/tag/v$version and put it at $installDir\super-agent-installer.exe" }
 
   $line = Get-Content (Join-Path $tmp 'SHA256SUMS') | Where-Object { $_ -match "\s$([regex]::Escape($asset))$" } | Select-Object -First 1
   if (-not $line) { Fail "no checksum for $asset in SHA256SUMS" }

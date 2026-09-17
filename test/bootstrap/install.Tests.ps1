@@ -25,4 +25,19 @@ Describe 'install.ps1' {
     $r = Invoke-ScriptAnalyzer -Path "$PSScriptRoot/../../install.ps1" -Severity Warning,Error -IncludeRule PSUseCompatibleSyntax,PSUseCompatibleCommands -Settings @{ Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') }; PSUseCompatibleCommands = @{ Enable = $true; TargetProfiles = @('win-8_x64_10.0.17763.0_5.1.17763.316_x64_4.0.30319.42000_framework') } } }
     $r | Should -BeNullOrEmpty
   }
+  It 'rejects ARM64 with a clear message' {
+    $env:SAI_TEST_ARCH = 'ARM64'
+    $out = & pwsh -NoProfile -File "$PSScriptRoot/../../install.ps1" -NoRun 2>&1
+    $LASTEXITCODE | Should -Be 1
+    ($out -join "`n") | Should -Match 'no windows-arm64 build yet'
+    Test-Path (Join-Path $env:SAI_INSTALL_DIR 'super-agent-installer.exe') | Should -BeFalse
+  }
+  It 'fails with a retry / releases-page hint when the download fails (no npx fallback)' {
+    Remove-Item (Join-Path $env:SAI_BASE_URL 'super-agent-installer-windows-x64.exe')
+    $out = & pwsh -NoProfile -File "$PSScriptRoot/../../install.ps1" -NoRun 2>&1
+    $LASTEXITCODE | Should -Be 1
+    ($out -join "`n") | Should -Match 'download failed'
+    ($out -join "`n") | Should -Match 'releases/tag/v0.1.0'
+    ($out -join "`n") | Should -Not -Match 'npx'
+  }
 }

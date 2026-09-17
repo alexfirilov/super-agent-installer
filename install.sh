@@ -2,6 +2,7 @@
 # super-agent-installer bootstrap for Linux, macOS and WSL.
 # Usage: curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.sh | bash -s -- [--profile all] [--yes]
 set -eu
+umask 077
 
 SAI_DEFAULT_VERSION="0.1.0"
 SAI_VERSION="${SAI_VERSION:-$SAI_DEFAULT_VERSION}"
@@ -68,12 +69,7 @@ asset="super-agent-installer-${target}"
 say "downloading ${asset} v${SAI_VERSION}"
 
 if ! fetch "${SAI_BASE_URL}/${asset}" "$tmp/$asset" || ! fetch "${SAI_BASE_URL}/SHA256SUMS" "$tmp/SHA256SUMS"; then
-  if need node && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 22 ]; then
-    say "binary download failed; falling back to npx"
-    rm -rf "$tmp"
-    exec npx --yes "super-agent-installer@${SAI_VERSION}" "$@"
-  fi
-  die "download failed for ${SAI_BASE_URL}/${asset}"
+  die "download failed for ${SAI_BASE_URL}/${asset}. Retry, or download the binary and SHA256SUMS from https://github.com/${SAI_REPO}/releases/tag/v${SAI_VERSION} and put it at ${SAI_INSTALL_DIR}/super-agent-installer"
 fi
 
 # strip CR so SHA256SUMS files with CRLF line endings (e.g. produced on Windows) still match.

@@ -47,3 +47,16 @@ EOF
   [ "$status" -eq 0 ]
   [ -x "$SAI_INSTALL_DIR/super-agent-installer" ]
 }
+@test "download failure dies with a retry / releases-page hint and never falls back to npx" {
+  rm "$TMP/release/super-agent-installer-linux-x64"
+  printf '#!/bin/sh\necho "npx must not run"; exit 99\n' > "$TMP/fakebin/npx"; chmod +x "$TMP/fakebin/npx"
+  printf '#!/bin/sh\necho v24.0.0\n' > "$TMP/fakebin/node"; chmod +x "$TMP/fakebin/node"
+  run bash "$BATS_TEST_DIRNAME/../../install.sh" --no-run
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"download failed"* ]]; [[ "$output" == *"releases/tag/v0.1.0"* ]]; [[ "$output" != *"npx"* ]]
+  [ ! -e "$SAI_INSTALL_DIR/super-agent-installer" ]
+}
+@test "sets umask 077 before touching the filesystem" {
+  grep -n '^umask 077$' "$BATS_TEST_DIRNAME/../../install.sh"
+  [ "$(grep -n '^umask 077$' "$BATS_TEST_DIRNAME/../../install.sh" | cut -d: -f1)" -lt "$(grep -n 'mktemp' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)" ]
+}
