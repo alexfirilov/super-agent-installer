@@ -10,7 +10,7 @@ jobs:
       - run: bunx tsc --noEmit
       - run: bunx vitest run
       - run: sudo apt-get update && sudo apt-get install -y shellcheck bats
-      - run: shellcheck install.sh scripts/*.sh && bats test/bootstrap/install.bats
+      - run: bun run lint:sh && bats test/bootstrap/install.bats
   windows:
     strategy: { matrix: { os: [windows-latest, windows-2022] } }
     runs-on: ${{ matrix.os }}

@@ -28,9 +28,10 @@ Proxmox host (root, no sudo):
     super-agent-installer check      drift report (exit 2 when something is outdated or missing)
     super-agent-installer list       all components with verdicts and token costs
     super-agent-installer doctor     host diagnostics plus claude doctor / codex doctor
+    super-agent-installer self-update   update the installer binary only
     super-agent-installer uninstall [id...]
 
-Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state.
+Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update.
 
 ## What it manages
 
