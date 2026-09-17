@@ -34,7 +34,7 @@ export const claudeAgentProvider: Provider = {
     }
     if (!installed) {
       return [action(c.id, 'install', `install Claude Code (${ctx.channel})`, async () => {
-        if (h.platform === 'linux' && h.hasAvx === false) return fail('CPU has no AVX: Claude Code crashes with Illegal instruction. On Proxmox run: qm set <vmid> --cpu x86-64-v3 (or host), then retry.');
+        if (h.platform === 'linux' && h.hasAvx === false) ctx.log.warn('CPU reports no AVX; Claude Code may crash with Illegal instruction. On Proxmox: qm set <vmid> --cpu x86-64-v3');
         if (h.platform === 'linux' && h.isMusl && h.pkgManager === 'apk') { await ctx.run(['apk', 'add', '--no-cache', 'bash', 'curl', 'libgcc', 'libstdc++', 'ripgrep']); }
         if (h.platform === 'linux' && (h.isProxmoxHost || h.isRoot) && h.pkgManager === 'apt') {
           await ctx.run(['install', '-d', '-m', '0755', '/etc/apt/keyrings']);

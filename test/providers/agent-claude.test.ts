@@ -22,10 +22,12 @@ describe('claudeAgentProvider', () => {
     expect(ctx.calls.some((a) => a.includes('apt-get') && a.includes('claude-code'))).toBe(true);
     expect(ctx.calls.some((a) => a.join(' ').includes('install.sh'))).toBe(false);
   });
-  it('fails early without AVX on linux', async () => {
+  it('warns but proceeds without AVX on linux', async () => {
     const ctx = makeTestCtx({ host: { hasAvx: false }, fetch: fetchLatest('2.1.274') });
     const acts = await claudeAgentProvider.plan(comp, ctx, null, 'install'); const r = await acts[0]!.run(ctx);
-    expect(r.ok).toBe(false); expect(r.message).toMatch(/AVX/);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.some((a) => a.join(' ').includes('curl -fsSL https://claude.ai/install.sh | bash -s latest'))).toBe(true);
+    expect(ctx.log.lines.some((l) => l.includes('WARN') && l.includes('AVX'))).toBe(true);
   });
   it('plans update only when newer and not while claude is running', async () => {
     const ctx = makeTestCtx({ fetch: fetchLatest('2.1.274'), responses: { 'claude update': 'Successfully updated' } });
