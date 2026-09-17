@@ -87,7 +87,22 @@ export function resolveSelection(manifest: Manifest, host: HostInfo, o: ResolveO
     afterSlots.push(id);
   }
 
-  const ordered = closure(manifest, afterSlots).filter((id) => afterSlots.includes(id) || !excluded.some((e) => e.id === id));
+  const survivors = new Set(afterSlots);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of survivors) {
+      const c = byId.get(id)!;
+      const missing = [...(c.prerequisites ?? []), ...(c.dependsOn ?? [])].find((d) => !survivors.has(d));
+      if (missing) {
+        survivors.delete(id);
+        excluded.push({ id, reason: `dependency:${missing}` });
+        changed = true;
+      }
+    }
+  }
+  const survivorIds = afterSlots.filter((id) => survivors.has(id));
+  const ordered = closure(manifest, survivorIds);
   const components = ordered.map((id) => byId.get(id)!).filter((c) => c.platforms.includes(host.platform));
 
   const tok = { claude: 0, codex: 0 };

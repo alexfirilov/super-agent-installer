@@ -45,4 +45,28 @@ describe('resolveSelection', () => {
     expect(slotConflicts(manifest.components.filter((x) => ['caveman-sl', 'hud', 'superpowers'].includes(x.id)))).toEqual([{ slot: 'statusline', ids: ['caveman-sl', 'hud'] }]);
     expect(closure(manifest, ['caveman-sl'])).toEqual(['node', 'superpowers', 'caveman-sl']);
   });
+  it('excludes a component whose dependsOn target lost a slot conflict', () => {
+    const m: Manifest = { version: 1, profiles: {}, components: [
+      c('b', { slot: 'browser' }), c('d', { slot: 'browser' }), c('a', { dependsOn: ['b'] }),
+    ] };
+    const s = resolveSelection(m, host, { profile: 'all', picked: ['d', 'b', 'a'] });
+    expect(ids(s)).toEqual(['d']);
+    expect(s.excluded).toEqual(expect.arrayContaining([{ id: 'b', reason: 'slot:browser' }, { id: 'a', reason: 'dependency:b' }]));
+  });
+  it('excludes a component whose prerequisite was platform-filtered', () => {
+    const m: Manifest = { version: 1, profiles: {}, components: [
+      c('b', { platforms: ['windows'] }), c('a', { prerequisites: ['b'] }),
+    ] };
+    const s = resolveSelection(m, host, { profile: 'all', picked: ['a', 'b'] });
+    expect(ids(s)).toEqual([]);
+    expect(s.excluded).toEqual(expect.arrayContaining([{ id: 'b', reason: 'platform' }, { id: 'a', reason: 'dependency:b' }]));
+  });
+  it('drops a transitive chain when the root dependency is platform-excluded', () => {
+    const m: Manifest = { version: 1, profiles: {}, components: [
+      c('b', { platforms: ['windows'] }), c('a', { dependsOn: ['b'] }), c('c', { dependsOn: ['a'] }),
+    ] };
+    const s = resolveSelection(m, host, { profile: 'all', picked: ['c', 'a', 'b'] });
+    expect(ids(s)).toEqual([]);
+    expect(s.excluded).toEqual(expect.arrayContaining([{ id: 'b', reason: 'platform' }, { id: 'a', reason: 'dependency:b' }, { id: 'c', reason: 'dependency:a' }]));
+  });
 });
