@@ -28,6 +28,13 @@ describe('manifest.json', () => {
     const s = resolveSelection(m, host('linux'), { profile: 'proxmox-host' }); const ids = s.components.map((c) => c.id);
     expect(ids).toContain('set-claude-headless-seed'); expect(ids).toContain('set-codex-trust-home'); expect(ids).not.toContain('cp-playwright'); expect(ids).not.toContain('cp-chrome-devtools-mcp'); expect(ids).not.toContain('cp-typescript-lsp');
   });
+  it('windows default tool set installs admin-free via scoop (Task 6: zero UAC)', () => {
+    for (const id of ['jq', 'ripgrep', 'gh', 'go', 'uv', 'powershell-7']) {
+      const c = m.components.find((x) => x.id === id)!;
+      expect(c.spec.kind, id).toBe('tool');
+      expect((c.spec as { packages: { scoop?: string } }).packages.scoop, id).toBeTruthy();
+    }
+  });
   it('every skill component has audit entries (also skills: "*" ones)', () => {
     for (const c of m.components) if (c.spec.kind === 'skill') { expect(c.audit?.length, c.id).toBeGreaterThan(0); for (const a of c.audit ?? []) expect(`${a.owner}/${a.repo}`, c.id).toBe(c.spec.repo.replace(/^https:\/\/github\.com\//, '')); }
   });

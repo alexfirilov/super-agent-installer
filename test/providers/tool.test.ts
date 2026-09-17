@@ -21,8 +21,8 @@ describe('toolProvider', () => {
     const r = await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq' } }), ctx, null, 'install'))[0]!.run(ctx);
     expect(r.ok).toBe(false); expect(r.message).toMatch(/sudo/);
   });
-  it('uses winget on windows and npm -g without sudo', async () => {
-    const win = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, responses: { 'winget install --id jqlang.jq --silent --accept-source-agreements --accept-package-agreements': '' } });
+  it('uses winget on windows and npm -g without sudo (--elevate restores today\'s machine-scope winget path)', async () => {
+    const win = makeTestCtx({ elevate: true, host: { platform: 'windows', pkgManager: 'winget' }, responses: { 'winget install --id jqlang.jq --silent --accept-source-agreements --accept-package-agreements': '' } });
     await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq', winget: 'jqlang.jq' } }), win, null, 'install'))[0]!.run(win);
     expect(win.calls[0]?.[0]).toBe('winget');
     const responses: Record<string, string> = { 'npm install -g @caveman-ai/cli@1.3.4': '', 'caveman --version': '' };
@@ -30,6 +30,56 @@ describe('toolProvider', () => {
     const c = tool('caveman-cli', { probe: ['caveman', '--version'], packages: { npm: '@caveman-ai/cli@1.3.4' }, postInstall: { linux: [['caveman', '--version']] } });
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['npm', 'install', '-g', '@caveman-ai/cli@1.3.4']); expect(ctx.calls).toContainEqual(['caveman', '--version']);
+  });
+  it('windows without --elevate installs via scoop when present, bootstrapping it first when absent', async () => {
+    const present = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': '1.0', 'scoop install jq': '' } });
+    const r1 = await (await toolProvider.plan(tool('jq', { packages: { scoop: 'jq', winget: 'jqlang.jq' } }), present, null, 'install'))[0]!.run(present);
+    expect(r1.ok).toBe(true);
+    expect(present.calls).toContainEqual(['scoop', '--version']);
+    expect(present.calls).toContainEqual(['scoop', 'install', 'jq']);
+    expect(present.calls.some((a) => a[0] === 'winget')).toBe(false);
+    const absent = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': { code: 1 }, 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex': '', 'scoop install jq': '' } });
+    const r2 = await (await toolProvider.plan(tool('jq', { packages: { scoop: 'jq', winget: 'jqlang.jq' } }), absent, null, 'install'))[0]!.run(absent);
+    expect(r2.ok).toBe(true);
+    const bootstrapIdx = absent.calls.findIndex((a) => a.join(' ') === 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex');
+    const installIdx = absent.calls.findIndex((a) => a.join(' ') === 'scoop install jq');
+    expect(bootstrapIdx).toBeGreaterThanOrEqual(0); expect(installIdx).toBeGreaterThan(bootstrapIdx);
+  });
+  it('windows without --elevate uses winget --scope user only for the allow-listed Git.Git package', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows' }, responses: { 'winget install --id Git.Git --scope user --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const c = tool('git', { packages: { winget: 'Git.Git' } });
+    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['winget', 'install', '--id', 'Git.Git', '--scope', 'user', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+  });
+  it('windows without --elevate fails a machine-only winget package with the --elevate message and never calls winget', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows' } });
+    const c = tool('go', { packages: { winget: 'GoLang.Go' } });
+    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(false);
+    expect(r.message).toBe('needs admin: rerun with --elevate, or install go yourself');
+    expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
+  });
+  it('node strategy on windows uses scoop + fnm without --elevate, and winget with --elevate', async () => {
+    const user = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '' } });
+    const r1 = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+    expect(r1.ok).toBe(true);
+    expect(user.calls).toContainEqual(['scoop', 'install', 'fnm']);
+    expect(user.calls).toContainEqual(['fnm', 'install', '24']);
+    expect(user.calls).toContainEqual(['fnm', 'default', '24']);
+    expect(user.calls.some((a) => a[0] === 'winget')).toBe(false);
+    const elevated = makeTestCtx({ elevate: true, host: { platform: 'windows' }, responses: { 'winget install --id OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r2 = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), elevated, null, 'install'))[0]!.run(elevated);
+    expect(r2.ok).toBe(true);
+    expect(elevated.calls).toContainEqual(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+    expect(elevated.calls.some((a) => a[0] === 'scoop')).toBe(false);
+  });
+  it('ensureScoop refuses an elevated shell without --elevate, so node install fails with the admin message', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true } });
+    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/needs admin: rerun with --elevate/);
+    expect(ctx.calls.some((a) => a[0] === 'scoop' || a[0] === 'winget')).toBe(false);
   });
   it('node strategy picks NodeSource for root apt and fnm for users', async () => {
     const root = makeTestCtx({ host: { isRoot: true, hasSudo: false }, responses: { 'bash -c curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs': '' } });

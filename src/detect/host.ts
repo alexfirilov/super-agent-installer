@@ -29,10 +29,12 @@ export async function detectHost(d: HostDeps): Promise<HostInfo> {
   else { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', `(Get-PSDrive -Name ($env:USERPROFILE.Substring(0,1))).Free / 1MB`], { readOnly: true, allowFailure: true }); const s = r.stdout.trim(); const n = s ? Number(s) : NaN; diskFreeMb = r.code === 0 && Number.isFinite(n) ? Math.floor(n) : null; }
   let windowsDeveloperMode: boolean | null = null;
   if (platform === 'windows') { const r = await d.run(['reg.exe', 'query', 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock', '/v', 'AllowDevelopmentWithoutDevLicense'], { readOnly: true, allowFailure: true }); windowsDeveloperMode = r.code === 0 ? /0x1/.test(r.stdout) : false; }
+  let isElevated: boolean | null = null;
+  if (platform === 'windows') { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'], { readOnly: true, allowFailure: true }); isElevated = r.code === 0 ? /true/i.test(r.stdout) : false; }
   return {
     platform, arch, isRoot, hasSudo: platform !== 'windows' && !isRoot && (await d.which('sudo')), pkgManager,
     isWsl: /microsoft/i.test(version ?? '') || !!d.env.WSL_DISTRO_NAME, isProxmoxHost: platform === 'linux' && ((await d.which('pveversion')) || (await d.exists('/etc/pve/.version'))),
     isLxc: /container=lxc/.test(environ ?? ''), isNixOS: osRelease.ID === 'nixos', isMusl: platform === 'linux' && ((await d.exists('/lib/ld-musl-x86_64.so.1')) || (await d.exists('/lib/ld-musl-aarch64.so.1'))),
-    hasAvx, hasBwrap: platform === 'linux' && (await has('bwrap')), home, diskFreeMb, claudeRunning, windowsDeveloperMode, osRelease,
+    hasAvx, hasBwrap: platform === 'linux' && (await has('bwrap')), home, diskFreeMb, claudeRunning, windowsDeveloperMode, isElevated, osRelease,
   };
 }

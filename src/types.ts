@@ -49,6 +49,8 @@ export interface HostInfo {
   platform: Platform; arch: Arch; isRoot: boolean; hasSudo: boolean; pkgManager: PkgManager; isWsl: boolean; isProxmoxHost: boolean;
   isLxc: boolean; isNixOS: boolean; isMusl: boolean; hasAvx: boolean | null; hasBwrap: boolean; home: string; diskFreeMb: number | null;
   claudeRunning: boolean; windowsDeveloperMode: boolean | null; osRelease: Record<string, string>;
+  /** Windows: the `WindowsPrincipal.IsInRole(Administrator)` probe (true = running elevated); `null` off Windows. */
+  isElevated: boolean | null;
 }
 export interface Paths { claudeConfigDir: string; claudeSettings: string; claudeJson: string; claudeMd: string; claudeHooksDir: string; codexHome: string; codexConfig: string; codexHooks: string; codexAgentsMd: string; agentsSkillsDir: string; stateDir: string; stateFile: string; backupsDir: string; logFile: string }
 
@@ -72,6 +74,8 @@ export type AuthState = { agent: 'claude' | 'codex'; authenticated: boolean; mod
 export interface Ctx {
   host: HostInfo; paths: Paths; run: Runner; log: Logger; dryRun: boolean; yes: boolean; noAudit: boolean; channel: Channel;
   secrets: Map<string, string>; fetch: typeof fetch; env: Record<string, string | undefined>; manifest: Manifest;
+  /** From `--elevate` (default false). When false on Windows, installs must stay per-user (scoop / `winget --scope user` / npm / script) and never trigger UAC. */
+  elevate: boolean;
   auth?: Partial<Record<'claude' | 'codex', AuthState>>;
   secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
 }

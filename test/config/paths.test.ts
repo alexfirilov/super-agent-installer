@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolvePaths } from '../../src/config/paths.js';
 import type { HostInfo } from '../../src/types.js';
-const base = { platform: 'linux', arch: 'x64', isRoot: false, hasSudo: true, pkgManager: 'apt', isWsl: false, isProxmoxHost: false, isLxc: false, isNixOS: false, isMusl: false, hasAvx: true, hasBwrap: true, home: '/home/u', diskFreeMb: 1, claudeRunning: false, windowsDeveloperMode: null, osRelease: {} } as HostInfo;
+const base = { platform: 'linux', arch: 'x64', isRoot: false, hasSudo: true, pkgManager: 'apt', isWsl: false, isProxmoxHost: false, isLxc: false, isNixOS: false, isMusl: false, hasAvx: true, hasBwrap: true, home: '/home/u', diskFreeMb: 1, claudeRunning: false, windowsDeveloperMode: null, isElevated: null, osRelease: {} } as HostInfo;
 describe('resolvePaths', () => {
   it('uses defaults on linux', () => {
     const p = resolvePaths(base, {});

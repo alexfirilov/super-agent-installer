@@ -26,6 +26,7 @@ async function aptUpdateOnce(ctx: Ctx, cmd: string[]): Promise<void> {
   await ctx.run(sudo(ctx, ['apt-get', 'update']) ?? ['apt-get', 'update'], { allowFailure: true, timeoutMs: 600000 });
 }
 
+/** POSIX + generic package-manager routing (apt/dnf/yum/pacman/zypper/apk/brew). Windows is routed separately by `windowsUserRoute`/`windowsElevatedRoute` below, since the right route there depends on `ctx.elevate`, not just the detected `pkgManager`. */
 function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo' {
   const pm = ctx.host.pkgManager;
   const s = (argv: string[]) => sudo(ctx, argv) ?? 'nosudo';
@@ -36,6 +37,45 @@ function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo
     case 'zypper': return p.zypper ? s(['zypper', '--non-interactive', 'install', ...split(p.zypper)]) : null;
     case 'apk': return p.apk ? s(['apk', 'add', '--no-cache', ...split(p.apk)]) : null;
     case 'brew': return p.brew ? ['brew', 'install', ...split(p.brew)] : null;
+    default: return null;
+  }
+}
+
+/** Winget packages whose manifest actually declares `Scope: user` (research dossier D2, from real winget-pkgs manifests). Every other winget package is machine-only and needs admin — do not guess at more of these. */
+const WINGET_USER_SCOPE_IDS = new Set<string>(['Git.Git']);
+
+/**
+ * Probes for scoop, bootstrapping it via the official installer if missing. Scoop's own installer refuses to run in
+ * an elevated shell, so this refuses upfront too rather than letting the bootstrap command fail opaquely.
+ * Returns `true` on success, or a string describing why scoop could not be used.
+ */
+async function ensureScoop(ctx: Ctx): Promise<true | string> {
+  if (ctx.host.isElevated) return 'scoop rejects elevated shells; rerun without admin, or use --elevate';
+  if ((await ctx.run(['scoop', '--version'], { readOnly: true, allowFailure: true })).code === 0) return true;
+  const r = await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm get.scoop.sh | iex'], { timeoutMs: 600000, allowFailure: true });
+  return r.code === 0 ? true : `failed to bootstrap scoop: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`}`;
+}
+
+/**
+ * Windows install route when `--elevate` was NOT passed: scoop first (bootstrapping it if absent), then
+ * `winget --scope user` for the small allow-list of packages that actually support it, then `null` so the
+ * generic npm/script fallback in `plan()` gets a turn. Returns `'needs-admin'` only when none of those apply
+ * and the package's only route left is a machine-scope winget install — the caller must not invoke winget then.
+ */
+async function windowsUserRoute(ctx: Ctx, p: ToolSpec['packages']): Promise<string[] | 'needs-admin' | null> {
+  if (p.scoop) {
+    const s = await ensureScoop(ctx);
+    if (s === true) return ['scoop', 'install', ...split(p.scoop)];
+    ctx.log.warn(`scoop unavailable (${s}); trying the next install route`);
+  }
+  if (p.winget && WINGET_USER_SCOPE_IDS.has(p.winget)) return ['winget', 'install', '--id', p.winget, '--scope', 'user', '--silent', '--accept-source-agreements', '--accept-package-agreements'];
+  if (p.winget && !p.npm && !p.script?.windows) return 'needs-admin';
+  return null;
+}
+
+/** Windows install route when `--elevate` was passed: today's machine-scope behaviour, keyed off the detected package manager. */
+function windowsElevatedRoute(ctx: Ctx, p: ToolSpec['packages']): string[] | null {
+  switch (ctx.host.pkgManager) {
     case 'winget': return p.winget ? ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'] : null;
     case 'scoop': return p.scoop ? ['scoop', 'install', ...split(p.scoop)] : null;
     case 'choco': return p.choco ? ['choco', 'install', '-y', ...split(p.choco)] : null;
@@ -67,30 +107,40 @@ async function npmUninstall(ctx: Ctx, pkgs: string[]): Promise<void> {
   if (ctx.host.platform !== 'windows' && (await Promise.all(pkgs.map((p) => stat(join(local, 'lib', 'node_modules', p)).then(() => true, () => false)))).some(Boolean)) await ctx.run(['npm', 'uninstall', '-g', '--prefix', local, ...pkgs], { allowFailure: true });
 }
 
-async function installNode(ctx: Ctx): Promise<string | null> {
+type NodeInstallResult = { ok: true; note: string | null } | { ok: false; message: string };
+
+async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
   const h = ctx.host;
   if (h.platform === 'windows') {
+    if (!ctx.elevate) {
+      const s = await ensureScoop(ctx);
+      if (s !== true) return { ok: false, message: `needs admin: rerun with --elevate, or install ${name} yourself (${s})` };
+      await ctx.run(['scoop', 'install', 'fnm']);
+      await ctx.run(['fnm', 'install', String(NODE_MAJOR)], { timeoutMs: 600000 });
+      await ctx.run(['fnm', 'default', String(NODE_MAJOR)], { timeoutMs: 600000 });
+      return { ok: true, note: `Node ${NODE_MAJOR} installed with fnm. Open a new shell (or run \`fnm env --use-on-cd | Invoke-Expression\`) so it's picked up.` };
+    }
     await ctx.run(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
-    return null;
+    return { ok: true, note: null };
   }
   if (h.platform === 'darwin') {
     await ctx.run(['brew', 'install', `node@${NODE_MAJOR}`]);
     await ctx.run(['brew', 'link', '--overwrite', '--force', `node@${NODE_MAJOR}`], { allowFailure: true });
-    return null;
+    return { ok: true, note: null };
   }
   if ((h.isRoot || h.isProxmoxHost) && h.pkgManager === 'apt') {
     await ctx.run(['bash', '-c', `curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs`], { timeoutMs: 600000 });
-    return null;
+    return { ok: true, note: null };
   }
   if (h.isRoot && h.pkgManager) {
     const cmd = pmInstall(ctx, { dnf: 'nodejs npm', pacman: 'nodejs npm', apk: 'nodejs npm', zypper: 'nodejs22 npm22' });
-    if (cmd && cmd !== 'nosudo') { await ctx.run(cmd); return null; }
+    if (cmd && cmd !== 'nosudo') { await ctx.run(cmd); return { ok: true, note: null }; }
   }
   await ctx.run(['bash', '-c', 'curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell'], { timeoutMs: 600000 });
   const fnm = join(h.home, '.local', 'share', 'fnm', 'fnm');
   await ctx.run([fnm, 'install', String(NODE_MAJOR)], { timeoutMs: 600000 });
   await ctx.run([fnm, 'default', String(NODE_MAJOR)], { timeoutMs: 600000 });
-  return `Node ${NODE_MAJOR} installed with fnm. Add to your shell rc: eval "$(${fnm} env --use-on-cd)"`;
+  return { ok: true, note: `Node ${NODE_MAJOR} installed with fnm. Add to your shell rc: eval "$(${fnm} env --use-on-cd)"` };
 }
 
 async function toolLatest(c: Component, ctx: Ctx): Promise<string | null> {
@@ -133,6 +183,7 @@ export const toolProvider: Provider = {
         if (pm === 'apt' && p.apt) { const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...split(p.apt)]); if (cmd) { await ctx.run(cmd, { allowFailure: true }); return ok(`${c.name} removed`); } }
         else if (pm === 'brew' && p.brew) { await ctx.run(['brew', 'uninstall', ...split(p.brew)], { allowFailure: true }); return ok(`${c.name} removed`); }
         else if (pm === 'winget' && p.winget) { await ctx.run(['winget', 'uninstall', '--id', p.winget, '--silent'], { allowFailure: true }); return ok(`${c.name} removed`); }
+        else if (pm === 'scoop' && p.scoop) { await ctx.run(['scoop', 'uninstall', ...split(p.scoop)], { allowFailure: true }); return ok(`${c.name} removed`); }
         return ok(`${c.name}: no uninstall route for ${pm ?? 'this host'}; remove it manually`, false);
       })];
     }
@@ -146,12 +197,20 @@ export const toolProvider: Provider = {
     const op = installed ? 'update' : 'install';
     return [action(c.id, op, `${op} ${c.name}${latest ? ` (${latest})` : ''}`, async () => {
       if (spec.strategy === 'node') {
-        const note = await installNode(ctx);
+        const r = await installNode(ctx, c.name);
+        if (!r.ok) return fail(r.message);
         await post();
-        return ok(`Node installed${note ? `. ${note}` : ''}`);
+        return ok(`Node installed${r.note ? `. ${r.note}` : ''}`);
       }
       const p = spec.packages;
-      const cmd = pmInstall(ctx, p);
+      let cmd: string[] | null | 'nosudo' = null;
+      let needsAdmin = false;
+      if (h.platform === 'windows') {
+        if (ctx.elevate) cmd = windowsElevatedRoute(ctx, p);
+        else { const w = await windowsUserRoute(ctx, p); if (w === 'needs-admin') needsAdmin = true; else cmd = w; }
+      } else {
+        cmd = pmInstall(ctx, p);
+      }
       if (cmd === 'nosudo') return fail(`${c.name}: needs root or sudo to use ${h.pkgManager}; install it manually or rerun as root`);
       if (cmd) { await aptUpdateOnce(ctx, cmd); await ctx.run(cmd, { timeoutMs: 600000 }); }
       else if (p.npm) await npmGlobal(ctx, p.npm);
@@ -164,6 +223,7 @@ export const toolProvider: Provider = {
       }
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });
       else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
+      else if (needsAdmin) return fail(`needs admin: rerun with --elevate, or install ${c.name} yourself`);
       else return fail(`${c.name}: no install route for ${h.platform}/${h.pkgManager ?? 'no package manager'}`);
       await post();
       // a package manager can only offer what its repo has: re-probe rather than claim an update the distro could not deliver

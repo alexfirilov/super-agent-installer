@@ -28,6 +28,25 @@ describe('detectHost', () => {
     const d = await detectHost(deps({ platform: 'darwin', bins: ['brew'] }));
     expect(d).toMatchObject({ platform: 'darwin', pkgManager: 'brew' });
   });
+  it('reports isElevated on windows via the WindowsPrincipal probe, null elsewhere', async () => {
+    const elevated = await detectHost(deps({
+      platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
+      run: async (argv) => argv[0] === 'powershell.exe' ? { code: 0, stdout: 'True\n', stderr: '', skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false },
+    }));
+    expect(elevated.isElevated).toBe(true);
+    const notElevated = await detectHost(deps({
+      platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
+      run: async (argv) => argv[0] === 'powershell.exe' ? { code: 0, stdout: 'False\n', stderr: '', skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false },
+    }));
+    expect(notElevated.isElevated).toBe(false);
+    const failed = await detectHost(deps({
+      platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
+      run: async (argv) => argv[0] === 'powershell.exe' ? { code: 1, stdout: '', stderr: '', skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false },
+    }));
+    expect(failed.isElevated).toBe(false);
+    const linux = await detectHost(deps({}));
+    expect(linux.isElevated).toBeNull();
+  });
   it('treats empty or failed windows disk probe output as unknown, not zero', async () => {
     const failed = await detectHost(deps({
       platform: 'win32', env: { USERPROFILE: 'C:\\Users\\u' },
