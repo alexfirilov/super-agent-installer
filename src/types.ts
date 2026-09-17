@@ -25,7 +25,7 @@ export interface ToolPackages {
   npm?: string; go?: string; uvTool?: string; script?: Partial<Record<Platform, string>>;
 }
 export interface ToolSpec { kind: 'tool'; probe: string[]; versionRegex?: string; packages: ToolPackages; latest?: { npm?: string; github?: string }; postInstall?: Partial<Record<Platform, string[][]>>; strategy?: 'node' }
-export interface SettingSpec { kind: 'setting'; target: 'claude' | 'codex'; claudeSettings?: Record<string, unknown>; codexToml?: Record<string, unknown>; codexFeatures?: Record<string, boolean>; windowsGitConfig?: Record<string, string> }
+export interface SettingSpec { kind: 'setting'; target: 'claude' | 'codex'; claudeSettings?: Record<string, unknown>; claudeJsonSeed?: Record<string, unknown>; codexToml?: Record<string, unknown>; codexFeatures?: Record<string, boolean>; windowsGitConfig?: Record<string, string> }
 export interface HookSpec { kind: 'hook'; provider: 'caveman'; agent: 'claude' | 'codex' }
 export interface StatuslineSpec { kind: 'statusline'; provider: 'caveman' | 'claude-hud' }
 export interface InstructionsSpec { kind: 'instructions'; source: string }
