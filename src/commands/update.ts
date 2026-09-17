@@ -8,7 +8,10 @@ import { renderPlan, renderSummary, postInstallHints } from './summary.js';
 import { table } from '../ui/log.js';
 export interface UpdateOpts { json?: boolean; installerVersion: string; noSelfUpdate?: boolean; selfUpdateFn?: (ctx: Ctx, version: string) => Promise<{ updated: boolean; message: string }> }
 export async function runUpdate(ctx: Ctx, o: UpdateOpts): Promise<number> {
-  if (!o.noSelfUpdate && o.selfUpdateFn) { const r = await o.selfUpdateFn(ctx, o.installerVersion); ctx.log.info(`self-update: ${r.message}`); if (r.updated) return 0; }
+  if (!o.noSelfUpdate && o.selfUpdateFn) {
+    if (ctx.dryRun) ctx.log.info('[dry-run] self-update skipped');
+    else { const r = await o.selfUpdateFn(ctx, o.installerVersion); ctx.log.info(`self-update: ${r.message}`); if (r.updated) return 0; }
+  }
   const state = await readState(ctx.paths.stateFile);
   if (!state) ctx.log.warn('no saved selection on this host; updating the "all" profile');
   const sel = state ? resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: state.selectedIds }) : resolveSelection(ctx.manifest, ctx.host, { profile: 'all' });

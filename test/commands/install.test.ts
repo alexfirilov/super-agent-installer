@@ -29,4 +29,11 @@ describe('runInstall / runUpdate', () => {
     expect(selfUpdated).toBe(true); expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds).toEqual(['a']);
   });
   it('bails on NixOS with exit 4', async () => { clearProviders(); registerProvider(fake([])); const ctx = makeTestCtx({ manifest, host: { isNixOS: true } }); expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' })).toBe(4); });
+  it('update skips self-update under dry-run', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest, dryRun: true }); await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    let selfUpdated = false;
+    expect(await runUpdate(ctx, { installerVersion: '0.1.0', selfUpdateFn: async () => { selfUpdated = true; return { updated: true, message: 'would update' }; } })).toBe(0);
+    expect(selfUpdated).toBe(false);
+  });
 });

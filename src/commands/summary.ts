@@ -8,7 +8,11 @@ export function renderSummary(records: StepRecord[]): string {
   return `${table(rows, ['result', 'component', 'op', 'message'])}${skipped ? `\n(${skipped} skipped: nothing to do)` : ''}`;
 }
 export async function promptSecrets(ctx: Ctx, components: Component[]): Promise<void> {
-  const wanted = components.flatMap((c) => (c.secrets ?? []).map((s) => ({ ...s, component: c.id }))).filter((s) => !ctx.env[s.env] && !ctx.secrets.has(s.env));
+  const seenEnv = new Set<string>();
+  const wanted = components
+    .flatMap((c) => (c.secrets ?? []).map((s) => ({ ...s, component: c.id })))
+    .filter((s) => !ctx.env[s.env] && !ctx.secrets.has(s.env))
+    .filter((s) => (seenEnv.has(s.env) ? false : (seenEnv.add(s.env), true)));
   if (!wanted.length) return;
   if (ctx.yes) { ctx.log.warn(`secrets not set (non-interactive): ${wanted.map((s) => s.env).join(', ')}. Export them before using those components.`); return; }
   for (const s of wanted) {

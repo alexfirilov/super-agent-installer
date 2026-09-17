@@ -16,8 +16,10 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   if (!ctx.yes) { const c = await p.confirm({ message: `Remove ${sel.components.length} component(s)?`, initialValue: false }); if (p.isCancel(c) || !c) return 0; }
   const result = await executePlan(plan, ctx);
   if (!o.json) console.log('\n' + renderSummary(result.records)); else console.log(JSON.stringify(result.records, null, 2));
-  const remaining = (state?.selectedIds ?? []).filter((id) => !result.records.some((r) => r.componentId === id && r.op === 'uninstall' && r.ok));
+  const removedIds = new Set(target.filter((id) => result.records.some((r) => r.componentId === id && r.ok)));
+  const remaining = (state?.selectedIds ?? []).filter((id) => !removedIds.has(id));
   const next = buildState(state, { ...sel, components: ctx.manifest.components.filter((c) => remaining.includes(c.id)) }, result.records, plan.detections, o.installerVersion, ctx.channel);
+  for (const id of removedIds) delete next.installed[id];
   await writeState(ctx.paths.stateFile, next);
   return result.failed ? 1 : 0;
 }
