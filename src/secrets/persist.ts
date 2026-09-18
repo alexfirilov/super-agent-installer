@@ -43,7 +43,8 @@ async function persistWindows(ctx: Ctx, vars: Map<string, string>): Promise<Pers
  * secret into an existing 644 rc file would leave it world-readable. Instead we chmod the secrets file to 0600
  * explicitly after every write (never trusting "it was already 0600") and verify it stuck before reporting
  * success; the rc files only ever receive a guarded `. "<path>"` source line, so no secret value reaches them and
- * their own mode is left exactly as it was.
+ * their own mode is left exactly as it was. The source line goes in its own `hashSecrets` marker block, never the
+ * plain `hash` one: `install.sh` owns that one in the same files for its PATH export.
  */
 async function writeSecretsFile(ctx: Ctx, block: string): Promise<string> {
   const secretsPath = join(ctx.paths.stateDir, 'secrets.env');
@@ -67,7 +68,7 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
   const sourceLine = `[ -f "${secretsPath}" ] && . "${secretsPath}"`;
   const profilePath = join(ctx.host.home, '.profile');
   try {
-    await writeTextAtomic(profilePath, setMarkerBlock(await readIfExists(profilePath), sourceLine, 'hash'));
+    await writeTextAtomic(profilePath, setMarkerBlock(await readIfExists(profilePath), sourceLine, 'hashSecrets'));
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
     return { persisted: [], failed: names.map((name) => ({ name, reason })) };
@@ -75,7 +76,7 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
   const zshrcPath = join(ctx.host.home, '.zshrc');
   if (await fileExists(zshrcPath)) {
     try {
-      await writeTextAtomic(zshrcPath, setMarkerBlock(await readIfExists(zshrcPath), sourceLine, 'hash'));
+      await writeTextAtomic(zshrcPath, setMarkerBlock(await readIfExists(zshrcPath), sourceLine, 'hashSecrets'));
     } catch (e) {
       ctx.log.warn(`could not update ~/.zshrc: ${e instanceof Error ? e.message : String(e)}`);
     }

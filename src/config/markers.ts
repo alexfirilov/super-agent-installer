@@ -1,4 +1,8 @@
-export const MARKER_STYLES = { hash: { start: '# >>> super-agent-installer >>>', end: '# <<< super-agent-installer <<<' }, html: { start: '<!-- super-agent-installer:start -->', end: '<!-- super-agent-installer:end -->' } } as const;
+/** `hash` is the shared shell/TOML block. `hashSecrets` is a SEPARATE style on purpose: `install.sh` writes its
+ * `export PATH=` bootstrap into the very same rc files with the `hash` markers, and `setMarkerBlock` replaces a
+ * block's body -- reusing `hash` for the secrets source line would delete the PATH line the bootstrap just wrote.
+ * Neither marker text may change: both are already on real hosts and `uninstall`/`install.sh` look them up verbatim. */
+export const MARKER_STYLES = { hash: { start: '# >>> super-agent-installer >>>', end: '# <<< super-agent-installer <<<' }, hashSecrets: { start: '# >>> super-agent-installer secrets >>>', end: '# <<< super-agent-installer secrets <<<' }, html: { start: '<!-- super-agent-installer:start -->', end: '<!-- super-agent-installer:end -->' } } as const;
 export type MarkerStyle = keyof typeof MARKER_STYLES;
 export class MarkerError extends Error {}
 

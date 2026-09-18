@@ -92,6 +92,25 @@ describe('persistSecrets on POSIX', () => {
     expect(zshrcText).not.toContain('export A_KEY');
     expect(zshrcText).toContain(join(ctx.paths.stateDir, 'secrets.env'));
   });
+  // C2: install.sh writes its PATH block with the plain hash marker into the same rc files. The secrets source line
+  // must use its own marker, or setMarkerBlock replaces the bootstrap's `export PATH=` body with the source line.
+  it("keeps install.sh's PATH block intact and adds the source line as a separate block", async () => {
+    const ctx = makeTestCtx();
+    const profilePath = join(ctx.host.home, '.profile');
+    const installShBlock = '# my profile\n\n# >>> super-agent-installer >>>\nexport PATH="$HOME/.local/bin:$PATH"\n# <<< super-agent-installer <<<\n';
+    await writeFile(profilePath, installShBlock, 'utf8');
+    await persistSecrets(ctx, new Map([['A_KEY', 'v']]));
+    const text = await readFile(profilePath, 'utf8');
+    expect(text).toContain('# >>> super-agent-installer >>>');
+    expect(text).toContain('export PATH="$HOME/.local/bin:$PATH"');
+    expect(text).toContain('# <<< super-agent-installer <<<');
+    expect(text).toContain(join(ctx.paths.stateDir, 'secrets.env'));
+    expect(text).toContain('# >>> super-agent-installer secrets >>>');
+    // and it stays idempotent with both blocks present
+    const again = await persistSecrets(ctx, new Map([['A_KEY', 'v']]));
+    expect(again.persisted).toEqual(['A_KEY']);
+    expect(await readFile(profilePath, 'utf8')).toBe(text);
+  });
   it('does not force any particular mode onto an already-existing ~/.profile (it holds no secret)', async () => {
     const ctx = makeTestCtx();
     const profilePath = join(ctx.host.home, '.profile');
