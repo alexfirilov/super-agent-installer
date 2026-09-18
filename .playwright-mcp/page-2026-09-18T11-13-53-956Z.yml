@@ -1,0 +1,36 @@
+- generic [ref=f15e3]:
+  - heading "Welcome back" [level=1] [ref=f15e5]
+  - group [ref=f15e6]:
+    - form "Pick a log in option" [ref=f15e7]:
+      - generic [ref=f15e11]:
+        - generic: Email address
+        - textbox "Email address" [active] [ref=f15e12]
+      - generic [ref=f15e14]:
+        - button "Continue" [ref=f15e16] [cursor=pointer]
+        - generic [ref=f15e17]:
+          - text: Don't have an account?
+          - link "Sign up" [ref=f15e18] [cursor=pointer]:
+            - /url: /create-account
+        - generic [ref=f15e19]: OR
+        - generic [ref=f15e23]:
+          - button [ref=f15e25] [cursor=pointer]:
+            - img "Google logo" [ref=f15e28]
+            - text: Continue with Google
+          - button [ref=f15e42] [cursor=pointer]:
+            - img "Apple logo" [ref=f15e45]
+            - text: Continue with Apple
+          - button [ref=f15e50] [cursor=pointer]:
+            - img "Microsoft logo" [ref=f15e53]
+            - text: Continue with Microsoft
+          - button [ref=f15e59] [cursor=pointer]
+  - generic [ref=f15e65]:
+    - text: ChatGPT
+    - link "Terms of Use" [ref=f15e66] [cursor=pointer]:
+      - /url: https://openai.com/policies/terms-of-use
+    - text: and
+    - link "Privacy Policy" [ref=f15e67] [cursor=pointer]:
+      - /url: https://openai.com/policies/privacy-policy
+    - text: apply. Your ChatGPT training controls apply to Codex. See what
+    - link "data Codex receives" [ref=f15e68] [cursor=pointer]:
+      - /url: https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan
+    - text: from ChatGPT and how it may use it. Codex can make mistakes, and your ChatGPT rate limits apply.

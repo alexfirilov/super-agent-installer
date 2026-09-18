@@ -1,0 +1,20 @@
+- generic [ref=f19e3]:
+  - img "ChatGPT" [ref=f19e4]
+  - group [ref=f19e13]:
+    - form "Sign in to Codex with ChatGPT" [ref=f19e14]:
+      - generic [ref=f19e15]: alexfirilov@gmail.com
+      - generic [ref=f19e23]:
+        - link "Cancel" [ref=f19e25] [cursor=pointer]:
+          - /url: https://chatgpt.com
+        - button "Continue" [ref=f19e27] [cursor=pointer]
+  - generic [ref=f19e30]:
+    - text: ChatGPT
+    - link "Terms of Use" [ref=f19e31] [cursor=pointer]:
+      - /url: https://openai.com/policies/terms-of-use
+    - text: and
+    - link "Privacy Policy" [ref=f19e32] [cursor=pointer]:
+      - /url: https://openai.com/policies/privacy-policy
+    - text: apply. Your ChatGPT training controls apply to Codex. See what
+    - link "data Codex receives" [ref=f19e33] [cursor=pointer]:
+      - /url: https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan
+    - text: from ChatGPT and how it may use it. Codex can make mistakes, and your ChatGPT rate limits apply.

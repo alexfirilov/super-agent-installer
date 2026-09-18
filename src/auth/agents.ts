@@ -1,3 +1,6 @@
+import { readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AuthState, Ctx } from '../types.js';
 
 export type { AuthState };
@@ -36,9 +39,37 @@ export async function detectAuth(ctx: Ctx, agent: 'claude' | 'codex'): Promise<A
   return { agent, authenticated: r.code === 0, mode, detail: firstLine(r.stdout) || firstLine(r.stderr) };
 }
 
+/** Strips CSI colour codes and OSC-8 hyperlink wrappers so a token or URL can be read out of a captured pty session. */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001B\]8;[^\u0007\u001B]*(?:\u0007|\u001B\\)/g, '').replace(/\u001B\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '\n');
+}
+
+/**
+ * `claude setup-token` renders its sign-in UI only to a terminal. With stdout redirected -- CI, `curl | sh > log`,
+ * nohup, any remote provisioning run -- it prints NOTHING at all and then waits for a browser flow the user was
+ * never told about, until the ten-minute timeout expires. GCE QA hit exactly that: a silent hang, which is worse
+ * than a clean failure. When we have no tty of our own, borrow one from script(1) and tee the session to a file we
+ * can read the token back out of, so the URL still reaches the user's screen.
+ */
+async function runSetupToken(ctx: Ctx): Promise<string> {
+  const usePty = !process.stdout.isTTY && ctx.host.platform === 'linux'
+    && (await ctx.run(['script', '--version'], { readOnly: true, allowFailure: true })).code === 0;
+  if (!usePty) return (await ctx.run(['claude', 'setup-token'], { timeoutMs: 600000, allowFailure: true })).stdout;
+  const logPath = join(tmpdir(), `sai-setup-token-${process.pid}.log`);
+  await writeFile(logPath, '', { mode: 0o600 }); // script(1) truncates but keeps the mode: the token must not be world-readable
+  try {
+    ctx.log.info('claude: starting sign-in - a URL will appear below; open it in a browser to finish');
+    await ctx.run(['script', '-qec', 'claude setup-token', logPath], { interactive: true, timeoutMs: 600000, allowFailure: true });
+    return stripAnsi(await readFile(logPath, 'utf8').catch(() => ''));
+  } finally {
+    await rm(logPath, { force: true });
+  }
+}
+
 async function signInClaudeHeadless(ctx: Ctx): Promise<AuthState> {
-  const r = await ctx.run(['claude', 'setup-token'], { timeoutMs: 600000, allowFailure: true });
-  const lines = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  const output = await runSetupToken(ctx);
+  const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
   let token: string | undefined;
   for (let i = lines.length - 1; i >= 0; i--) { const l = lines[i]; if (l && TOKEN_RE.test(l)) { token = l; break; } }
   if (!token) return { agent: 'claude', authenticated: false, mode: null, detail: 'claude setup-token produced no token' };

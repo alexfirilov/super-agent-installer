@@ -1,10 +1,10 @@
-import { mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Ctx, HostInfo, Logger, Manifest, Runner, RunOptions } from '../../src/types.js';
 import { resolvePaths } from '../../src/config/paths.js';
 import { createLogger } from '../../src/ui/log.js';
-export interface FakeOpts { responses?: Record<string, string | { code: number; stdout?: string; stderr?: string }>; env?: Record<string, string>; host?: Partial<HostInfo>; dryRun?: boolean; manifest?: Manifest; fetch?: typeof fetch; secrets?: Record<string, string>; elevate?: boolean }
+export interface FakeOpts { responses?: Record<string, string | { code: number; stdout?: string; stderr?: string; writesFile?: string }>; env?: Record<string, string>; host?: Partial<HostInfo>; dryRun?: boolean; manifest?: Manifest; fetch?: typeof fetch; secrets?: Record<string, string>; elevate?: boolean }
 export function makeTestCtx(o: FakeOpts = {}): Ctx & { calls: string[][]; opts: Array<{ argv: string[]; opts: RunOptions }>; log: Logger & { lines: string[] } } {
   const calls: string[][] = []; const optsLog: Array<{ argv: string[]; opts: RunOptions }> = [];
   const run: Runner = async (argv, opts = {}) => {
@@ -12,6 +12,8 @@ export function makeTestCtx(o: FakeOpts = {}): Ctx & { calls: string[][]; opts: 
     // unknown read-only probes behave like a missing command (127); unknown mutating commands succeed silently so providers can be tested without listing every side-effect command
     if (r === undefined) return opts.readOnly ? { code: 127, stdout: '', stderr: `no fake response for: ${key}`, skipped: false } : { code: 0, stdout: '', stderr: '', skipped: false };
     const res = typeof r === 'string' ? { code: 0, stdout: r, stderr: '', skipped: false } : { code: r.code, stdout: r.stdout ?? '', stderr: r.stderr ?? '', skipped: false };
+    // `writesFile` models a command whose real output goes to a file it is handed (script(1) tee-ing a pty session)
+    if (typeof r === 'object' && r.writesFile !== undefined) writeFileSync(argv[argv.length - 1]!, r.writesFile);
     if (res.code !== 0 && !opts.allowFailure) throw new Error(`${key} failed with exit ${res.code}`);
     // mirror the real runner: a matching stopOnOutput kills the child and reports stopped with exit 0
     if (opts.stopOnOutput?.test(res.stdout + res.stderr)) return { ...res, code: 0, stopped: true };
