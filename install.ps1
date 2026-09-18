@@ -1,7 +1,7 @@
 <#
  super-agent-installer bootstrap for Windows (Windows PowerShell 5.1 and PowerShell 7).
- Usage: irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1 | iex
-        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1))) -NoRun
+ Usage: irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.2.0/install.ps1 | iex
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.2.0/install.ps1))) -NoRun
 #>
 [CmdletBinding()]
 param([switch]$NoRun, [Parameter(ValueFromRemainingArguments = $true)][string[]]$RestArgs)
@@ -9,7 +9,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$defaultVersion = '0.1.0'
+$defaultVersion = '0.2.0'
 $version = if ($env:SAI_VERSION) { $env:SAI_VERSION } else { $defaultVersion }
 $repo = if ($env:SAI_REPO) { $env:SAI_REPO } else { 'alexfirilov/super-agent-installer' }
 $base = if ($env:SAI_BASE_URL) { $env:SAI_BASE_URL } else { "https://github.com/$repo/releases/download/v$version" }

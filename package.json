@@ -1,11 +1,15 @@
 {
   "name": "super-agent-installer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Install and update Claude Code, Codex CLI, plugins, skills and MCP servers on Linux, Windows and macOS",
   "type": "module",
   "license": "MIT",
-  "bin": { "super-agent-installer": "dist/cli.js" },
-  "engines": { "node": ">=22.20.0" },
+  "bin": {
+    "super-agent-installer": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.20.0"
+  },
   "scripts": {
     "build": "bun build ./src/cli.ts --target=node --outfile=dist/cli.js",
     "compile": "bash scripts/build.sh",

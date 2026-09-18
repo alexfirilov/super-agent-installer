@@ -6,16 +6,16 @@ One command that installs and updates Claude Code, Codex CLI, and the plugins, s
 
 Linux / macOS / WSL:
 
-    curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.2.0/install.sh | bash
 
 Windows (PowerShell 5.1 or 7):
 
-    irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1 | iex
+    irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.2.0/install.ps1 | iex
 
 Unattended:
 
     curl -fsSL .../install.sh | bash -s -- --yes --profile homelab
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.1.0/install.ps1))) --yes --profile work
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.2.0/install.ps1))) --yes --profile work
 
 Proxmox host (root, no sudo):
 
