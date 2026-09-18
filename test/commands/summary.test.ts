@@ -65,12 +65,31 @@ describe('postInstallHints advisory labeling', () => {
     expect(hints).toContain('codex: advisory: open Codex and run /hooks to trust the new hooks');
     expect(hints).toContain('advisory: restart running Claude Code sessions to pick up plugin and settings changes');
   });
-  it('no longer nags to run `claude`/`codex login` -- ensureAuth already signs the agents in during the run', () => {
+  // Concern A: the hint is derived from the sign-in outcome, not from the flag. An agent that signed in is never
+  // nagged; one whose sign-in was skipped (--no-login) or failed is, because otherwise nothing tells the user.
+  it('says nothing for an agent that signed in during the run', () => {
     const ctx = makeTestCtx();
-    const hints = postInstallHints(ctx, [], [rec('claude-code'), rec('codex-cli')]);
-    expect(hints.some((h) => /run `claude`/.test(h))).toBe(false);
-    expect(hints.some((h) => /run `codex`/.test(h))).toBe(false);
+    ctx.auth = { claude: { agent: 'claude', authenticated: true, mode: null, detail: 'Logged in as demo@example.com' }, codex: { agent: 'codex', authenticated: true, mode: 'chatgpt', detail: 'ChatGPT' } };
+    const hints = postInstallHints(ctx, [], [rec('claude-code'), rec('codex-cli')], { signIn: { agents: ['claude', 'codex'], attempted: true } });
     expect(hints).toEqual([]);
+  });
+  it('tells a --no-login user to log in, per agent the run needed', () => {
+    const ctx = makeTestCtx();
+    const hints = postInstallHints(ctx, [], [rec('claude-code'), rec('codex-cli')], { signIn: { agents: ['claude', 'codex'], attempted: false } });
+    expect(hints).toEqual([
+      'claude-code: run `claude` once to log in (sign-in was skipped with --no-login)',
+      'codex-cli: run `codex` once to log in (sign-in was skipped with --no-login)',
+    ]);
+  });
+  it('reports a sign-in that was attempted and failed, with the detail and the headless fallback', () => {
+    const ctx = makeTestCtx();
+    ctx.auth = { claude: { agent: 'claude', authenticated: false, mode: null, detail: 'Not logged in' } };
+    const hints = postInstallHints(ctx, [], [rec('claude-code')], { signIn: { agents: ['claude'], attempted: true } });
+    expect(hints).toEqual(['claude-code: sign-in did not complete (Not logged in); run `claude` (or `claude setup-token` on a headless host)']);
+  });
+  it('says nothing when the run needed no sign-in at all', () => {
+    const ctx = makeTestCtx();
+    expect(postInstallHints(ctx, [], [rec('claude-code')])).toEqual([]);
   });
 });
 

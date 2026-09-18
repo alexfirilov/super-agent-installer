@@ -3,8 +3,9 @@ import type { Action, Component, Ctx, StepRecord } from '../types.js';
 import { table } from '../ui/log.js';
 import { validateSecret, type KeyCheck } from '../secrets/validate.js';
 
-/** What the caller knows that the records do not: whether secret persistence was deliberately skipped. */
-export interface HintOpts { persistSkipped?: boolean }
+/** What the caller knows that the records do not: whether secret persistence was deliberately skipped, and which
+ * agents this run needed signed in (`attempted: false` means the phase was skipped with `--no-login`). */
+export interface HintOpts { persistSkipped?: boolean; signIn?: { agents: Array<'claude' | 'codex'>; attempted: boolean } }
 export interface SecretsUi { password(o: { message: string; mask?: string }): Promise<unknown>; isCancel(v: unknown): boolean }
 export const clackSecretsUi: SecretsUi = { password: (o) => p.password(o), isCancel: (v) => p.isCancel(v) };
 export function renderPlan(actions: Action[]): string { return table(actions.map((a) => [a.op, a.componentId, a.from || a.to ? `${a.from ?? '-'} -> ${a.to ?? '?'}` : '', a.description]), ['op', 'component', 'version', 'description']); }
@@ -53,13 +54,23 @@ export async function promptSecrets(ctx: Ctx, components: Component[], o: { ui?:
     ctx.secrets.set(s.env, value); ctx.env[s.env] = value;
   }
 }
-/** Every remaining `postInstallHint` (and the two hardcoded notes below) is advisory: something we could not turn
- * into an action (a slash command run inside the agent, a trust prompt, a reminder to restart a running session) --
- * never a shell command we could have run for the user. Sign-in itself is no longer hinted here: `ensureAuth` runs
- * it as part of the install (see `runInstall`), and its own failure is logged as a warning at the time, not queued
- * up as a leftover "next step". */
+const AGENT_COMPONENT = { claude: 'claude-code', codex: 'codex-cli' } as const;
+const HEADLESS_SIGN_IN = { claude: 'claude setup-token', codex: 'codex login --device-auth' } as const;
+/** Every remaining `postInstallHint` (and the hardcoded notes below) is advisory: something we could not turn into an
+ * action (a slash command run inside the agent, a trust prompt, a reminder to restart a running session) -- never a
+ * shell command we could have run for the user. The sign-in lines are the one exception, and they are derived from
+ * the outcome, never from a flag: `ensureAuth` normally signs the agents in during the run, so an agent that is
+ * authenticated is never nagged; one whose sign-in was skipped (`--no-login`) or ran and failed is, because nothing
+ * else in the output would tell the user. */
 export function postInstallHints(ctx: Ctx, components: Component[], records: StepRecord[], o: HintOpts = {}): string[] {
   const hints: string[] = [];
+  for (const agent of o.signIn?.agents ?? []) {
+    const state = ctx.auth?.[agent];
+    if (state?.authenticated) continue;
+    const id = AGENT_COMPONENT[agent];
+    if (!o.signIn?.attempted) hints.push(`${id}: run \`${agent}\` once to log in (sign-in was skipped with --no-login)`);
+    else hints.push(`${id}: sign-in did not complete${state?.detail ? ` (${state.detail})` : ''}; run \`${agent}\` (or \`${HEADLESS_SIGN_IN[agent]}\` on a headless host)`);
+  }
   for (const c of components) if (c.postInstallHint && records.some((r) => r.componentId === c.id && r.ok && r.changed)) hints.push(`${c.id}: advisory: ${c.postInstallHint}`);
   if (records.some((r) => /^hook-caveman-codex/.test(r.componentId) && r.ok && r.changed)) hints.push('codex: advisory: open Codex and run /hooks to trust the new hooks');
   if (ctx.host.claudeRunning) hints.push('advisory: restart running Claude Code sessions to pick up plugin and settings changes');

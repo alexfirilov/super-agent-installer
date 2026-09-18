@@ -4,8 +4,9 @@
 # `install --yes --profile minimal --no-login` (network required: npm, GitHub; --no-login because the container has
 # no browser for the sign-in phase to open), `check` and `update --no-self-update`. The real install's summary is
 # also checked for "Next steps" entries that should have run as actions instead of being left for the user (a
-# leftover `npm `/`setx `/`run \`claude\``/`run \`codex\`` line). Any non-zero step, or any such entry, fails the
-# matrix.
+# leftover `npm `/`setx `/`run \`claude\``/`run \`codex\`` line), and for the one entry that MUST be there: with
+# --no-login the summary has to name each agent that was left signed out. Any non-zero step, any leftover entry, or a
+# missing sign-in notice fails the matrix.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DOCKER="${DOCKER:-docker}"
@@ -22,6 +23,9 @@ INNER='
   echo "$out"
   if printf "%s\n" "$out" | grep -E "^- (npm |setx |run \`claude\`|run \`codex\`)"; then
     echo "FAILED: $SAI_IMAGE: Next steps contained an entry that should have run automatically"; exit 1
+  fi
+  if ! printf "%s\n" "$out" | grep -q "sign-in was skipped with --no-login"; then
+    echo "FAILED: $SAI_IMAGE: a --no-login run must still tell the user each agent is not signed in"; exit 1
   fi
   step super-agent-installer check
   step super-agent-installer update --no-self-update --yes

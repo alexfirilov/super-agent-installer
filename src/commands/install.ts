@@ -36,14 +36,13 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
    * So it runs immediately after the `agent` group installed the agents (`afterKind` below), or before the loop when
    * this selection installs no agent because both are already on the host. */
   let signedIn = false;
+  let signInAgents: Array<'claude' | 'codex'> = []; // remembered for the summary: an agent this run needed but could not sign in gets a "next step" line
   const signInAndSecrets = async (): Promise<void> => {
     if (signedIn) return; signedIn = true;
-    if (!o.noLogin) {
-      const agents = await agentsToSignIn(ctx, sel.components);
-      if (agents.length) {
-        const results = await ensureAuth(ctx, agents, { headless: isHeadless(ctx) });
-        ctx.auth = { ...ctx.auth, ...Object.fromEntries(results.map((r) => [r.agent, r])) };
-      }
+    signInAgents = await agentsToSignIn(ctx, sel.components);
+    if (!o.noLogin && signInAgents.length) {
+      const results = await ensureAuth(ctx, signInAgents, { headless: isHeadless(ctx) });
+      ctx.auth = { ...ctx.auth, ...Object.fromEntries(results.map((r) => [r.agent, r])) };
     }
     await promptSecrets(ctx, sel.components);
     if (!o.noPersistSecrets && ctx.secrets.size) {
@@ -56,7 +55,7 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
   if (!sel.components.some((c) => c.kind === 'agent')) await signInAndSecrets();
   const result = await executeGrouped(sel, ctx, 'install', { afterKind: (kind) => (kind === 'agent' ? signInAndSecrets() : undefined) });
-  if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records, { persistSkipped: !!o.noPersistSecrets }); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
+  if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records, { persistSkipped: !!o.noPersistSecrets, signIn: { agents: signInAgents, attempted: !o.noLogin } }); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
   await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
   return result.failed ? 1 : result.blocked ? 2 : 0; // 2: nothing failed, but a component was skipped because its agent is not signed in (D1)
 }
