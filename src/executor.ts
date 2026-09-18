@@ -4,19 +4,19 @@ import { invalidateClaudeState } from './providers/claude-plugin.js';
 import { invalidateCodexState } from './providers/codex-plugin.js';
 import { extendPath, extendPathWith, readSystemPath } from './exec/path.js';
 export interface ExecOpts { onStep?: (rec: StepRecord) => void; afterEach?: () => void | Promise<void> }
-export interface ExecResult { records: StepRecord[]; failed: number; changed: number }
+export interface ExecResult { records: StepRecord[]; failed: number; changed: number; blocked: number }
 export async function executePlan(plan: Plan, ctx: Ctx, opts: ExecOpts = {}): Promise<ExecResult> {
   const records: StepRecord[] = [];
   for (const a of plan.actions) {
     ctx.log.step(`${a.op.padEnd(9)} ${a.description}`);
     let rec: StepRecord;
-    try { const r = await a.run(ctx); rec = { componentId: a.componentId, op: a.op, ok: r.ok, changed: r.changed, message: r.message, from: a.from ?? null, to: a.to ?? null }; }
+    try { const r = await a.run(ctx); rec = { componentId: a.componentId, op: a.op, ok: r.ok, changed: r.changed, message: r.message, ...(r.blocked ? { blocked: true } : {}), from: a.from ?? null, to: a.to ?? null }; }
     catch (e) { rec = { componentId: a.componentId, op: a.op, ok: false, changed: false, message: (e as Error).message, from: a.from ?? null, to: a.to ?? null }; }
     if (!rec.ok) ctx.log.error(`${a.componentId}: ${rec.message}`); else if (rec.changed) ctx.log.info(`${a.componentId}: ${rec.message}`); else ctx.log.debug(`${a.componentId}: ${rec.message}`);
     records.push(rec); opts.onStep?.(rec);
     if (rec.op !== 'skip') await opts.afterEach?.();
   }
-  return { records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length };
+  return { records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length, blocked: records.filter((r) => r.blocked).length };
 }
 /** Kinds whose actions put new binaries on disk: after each of their actions the agent state caches are dropped and PATH is extended so later groups see them. */
 export const REFRESH_AFTER: ReadonlySet<Kind> = new Set<Kind>(['tool', 'agent']);
@@ -46,5 +46,5 @@ export async function executeGrouped(sel: Selection, ctx: Ctx, mode: Mode, opts:
     records.push(...r.records);
     await opts.afterKind?.(kind, ctx);
   }
-  return { plan, records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length };
+  return { plan, records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length, blocked: records.filter((r) => r.blocked).length };
 }

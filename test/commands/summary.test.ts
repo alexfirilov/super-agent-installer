@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { postInstallHints, secretExportHints, promptSecrets, type SecretsUi } from '../../src/commands/summary.js';
+import { postInstallHints, secretExportHints, promptSecrets, renderSummary, type SecretsUi } from '../../src/commands/summary.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component, StepRecord } from '../../src/types.js';
 const comp = (id: string, secrets: Component['secrets']): Component => ({ id, name: id, kind: 'mcp', agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: true, secrets, spec: { kind: 'mcp', target: 'claude', name: id, transport: 'http', url: 'https://x' } });
@@ -110,5 +110,21 @@ describe('promptSecrets validation', () => {
     await promptSecrets(ctx, wantsContext7, { ui });
     expect(ui.calls).toHaveLength(1);
     expect(ctx.secrets.get('CONTEXT7_API_KEY')).toBe('whatever-value');
+  });
+});
+
+// M3: a skip because an agent never signed in is not "nothing to do" -- it has to be visible in the table.
+describe('renderSummary and auth-blocked skips', () => {
+  const rec = (componentId: string, extra: Partial<StepRecord> = {}): StepRecord => ({ componentId, op: 'skip', ok: true, changed: false, message: 'nothing to do', ...extra });
+  it('hides an ordinary skip but shows an auth-blocked one, and counts only the ordinary one as skipped', () => {
+    const out = renderSummary([
+      rec('cp-a'),
+      rec('cx-superpowers-remote', { blocked: true, message: 'Codex is not signed in (remote catalog needs a ChatGPT login)' }),
+      { componentId: 'node', op: 'install', ok: true, changed: true, message: 'Node installed' },
+    ]);
+    expect(out).toContain('cx-superpowers-remote');
+    expect(out).toContain('BLOCKED');
+    expect(out).not.toContain('cp-a');
+    expect(out).toContain('(1 skipped: nothing to do)');
   });
 });

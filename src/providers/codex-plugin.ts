@@ -44,7 +44,7 @@ export const codexPluginProvider: Provider = {
       return ok(`${id} removed`);
     })] : [];
     if (!installed) {
-      if (await reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli')];
+      if (await reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli', { blocked: true })];
       return [action(c.id, 'install', `install ${id}`, async () => {
         await ensureCodexMarketplace(ctx, spec.marketplace, spec.marketplaceSource);
         const r = await add(ctx, id);
@@ -55,7 +55,7 @@ export const codexPluginProvider: Provider = {
       })];
     }
     if (mode !== 'update') return [];
-    if (await reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli')];
+    if (await reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli', { blocked: true })];
     return [action(c.id, 'update', `update ${id}`, async () => {
       await upgradeMarketplace(ctx, spec.marketplace);
       const r = await add(ctx, id);

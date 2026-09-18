@@ -6,9 +6,11 @@ import { validateSecret, type KeyCheck } from '../secrets/validate.js';
 export interface SecretsUi { password(o: { message: string; mask?: string }): Promise<unknown>; isCancel(v: unknown): boolean }
 export const clackSecretsUi: SecretsUi = { password: (o) => p.password(o), isCancel: (v) => p.isCancel(v) };
 export function renderPlan(actions: Action[]): string { return table(actions.map((a) => [a.op, a.componentId, a.from || a.to ? `${a.from ?? '-'} -> ${a.to ?? '?'}` : '', a.description]), ['op', 'component', 'version', 'description']); }
+/** Ordinary "nothing to do" skips collapse into the footer count; an auth-blocked one keeps its own BLOCKED row --
+ * it is the reason a component the user selected did not happen, and the run exits non-zero for it. */
 export function renderSummary(records: StepRecord[]): string {
-  const rows = records.filter((r) => r.op !== 'skip' || !r.ok).map((r) => [r.ok ? (r.changed ? 'changed' : 'ok') : 'FAILED', r.componentId, r.op, r.message.split('\n')[0] ?? '']);
-  const skipped = records.filter((r) => r.op === 'skip' && r.ok).length;
+  const rows = records.filter((r) => r.op !== 'skip' || !r.ok || r.blocked).map((r) => [r.ok ? (r.blocked ? 'BLOCKED' : r.changed ? 'changed' : 'ok') : 'FAILED', r.componentId, r.op, r.message.split('\n')[0] ?? '']);
+  const skipped = records.filter((r) => r.op === 'skip' && r.ok && !r.blocked).length;
   return `${table(rows, ['result', 'component', 'op', 'message'])}${skipped ? `\n(${skipped} skipped: nothing to do)` : ''}`;
 }
 async function askSecret(ui: SecretsUi, s: { env: string; prompt: string; required: boolean }, retry: boolean): Promise<string | undefined> {

@@ -192,3 +192,20 @@ describe('runInstall sign-in ordering (C1)', () => {
     expect(ctx.secretsPersist?.persisted).toEqual(['X_TOKEN']);
   });
 });
+
+// M3: D1 requires an auth failure to reach the exit code. An auth-blocked skip is not an ordinary skip.
+describe('runInstall exit code for auth-blocked components', () => {
+  it('returns 2 when a component was skipped because its agent is not signed in, and 0 for ordinary skips', async () => {
+    const blockedManifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cx-x', 'codex-plugin', { kind: 'codex-plugin', marketplace: 'openai-curated-remote', marketplaceSource: 'reserved', plugin: 'x' })] };
+    clearProviders();
+    registerProvider({ kind: 'codex-plugin', detect: async () => null, plan: async (c) => [skipAction(c.id, 'Codex is not signed in (remote catalog needs a ChatGPT login)', 'codex-cli', { blocked: true })] });
+    const ctx = makeTestCtx({ manifest: blockedManifest });
+    const orig = console.log; console.log = () => {};
+    try { expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true })).toBe(2); } finally { console.log = orig; }
+    clearProviders();
+    registerProvider({ kind: 'codex-plugin', detect: async () => null, plan: async (c) => [skipAction(c.id, 'nothing to do', 'codex-cli')] });
+    const plain = makeTestCtx({ manifest: blockedManifest });
+    const orig2 = console.log; console.log = () => {};
+    try { expect(await runInstall(plain, { profile: 'all', installerVersion: '0.1.0', noLogin: true })).toBe(0); } finally { console.log = orig2; }
+  });
+});
