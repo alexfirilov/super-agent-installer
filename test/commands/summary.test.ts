@@ -36,6 +36,21 @@ describe('secretExportHints', () => {
   });
 });
 
+describe('secrets captured but deliberately not persisted (M6)', () => {
+  it('prints a manual line for a captured secret that --no-persist-secrets kept out of the user environment', () => {
+    const ctx = makeTestCtx({ secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat-secret' } });
+    const hints = postInstallHints(ctx, [], [], { persistSkipped: true });
+    expect(hints.some((h) => /^export CLAUDE_CODE_OAUTH_TOKEN=<value>.*--no-persist-secrets/.test(h))).toBe(true);
+    expect(hints.join('\n')).not.toContain('sk-ant-oat-secret'); // never the value
+  });
+  it('says nothing about it when persistence was attempted and worked', () => {
+    const ctx = makeTestCtx({ secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat-secret' } });
+    ctx.secretsPersist = { persisted: ['CLAUDE_CODE_OAUTH_TOKEN'], failed: [] };
+    const hints = postInstallHints(ctx, [], []);
+    expect(hints.some((h) => /^export CLAUDE_CODE_OAUTH_TOKEN/.test(h))).toBe(false);
+  });
+});
+
 describe('postInstallHints advisory labeling', () => {
   const rec = (componentId: string): StepRecord => ({ componentId, op: 'install', ok: true, changed: true, message: 'installed' });
   it('labels a remaining manifest postInstallHint as advisory (nothing left that could have been an action)', () => {

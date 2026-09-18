@@ -56,7 +56,7 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
   if (!sel.components.some((c) => c.kind === 'agent')) await signInAndSecrets();
   const result = await executeGrouped(sel, ctx, 'install', { afterKind: (kind) => (kind === 'agent' ? signInAndSecrets() : undefined) });
-  if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
+  if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records, { persistSkipped: !!o.noPersistSecrets }); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
   await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
   return result.failed ? 1 : result.blocked ? 2 : 0; // 2: nothing failed, but a component was skipped because its agent is not signed in (D1)
 }
