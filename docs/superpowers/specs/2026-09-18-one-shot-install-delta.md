@@ -1,5 +1,7 @@
 # One-shot install (v0.2) — spec delta
 
+**Status:** Implemented (2026-09-18) — D1-D6 below are all shipped; see `docs/superpowers/plans/2026-09-18-one-shot-install.md` for the task-by-task delivery and `.superpowers/sdd/2026-09-18-one-shot-install/task-7-8-report.md` for the closing gate run.
+
 Amends `2026-09-17-super-agent-installer-design.md`. Everything not restated here still holds.
 
 Trigger: a real Windows 11 run of v0.1.0 left five manual follow-up steps and three failures. The goal of v0.2 is that a run finishes with nothing for the user to do afterwards: after the wizard and the sign-in step, the installer completes unattended.

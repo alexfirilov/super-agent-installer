@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Integration matrix: for every test/docker/Dockerfile.* build the image from the release binary and, inside one
 # container with a throwaway HOME / CLAUDE_CONFIG_DIR / CODEX_HOME, run doctor, a dry-run, then a REAL
-# `install --yes --profile minimal` (network required: claude.ai, chatgpt.com, npm, GitHub), `check` and
-# `update --no-self-update`. Any non-zero step fails the matrix.
+# `install --yes --profile minimal --no-login` (network required: npm, GitHub; --no-login because the container has
+# no browser for the sign-in phase to open), `check` and `update --no-self-update`. The real install's summary is
+# also checked for "Next steps" entries that should have run as actions instead of being left for the user (a
+# leftover `npm `/`setx `/`run \`claude\``/`run \`codex\`` line). Any non-zero step, or any such entry, fails the
+# matrix.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DOCKER="${DOCKER:-docker}"
@@ -14,7 +17,12 @@ INNER='
   step() { echo; echo "--- $SAI_IMAGE: $*"; "$@"; }
   step super-agent-installer doctor
   step super-agent-installer install --yes --profile "$SAI_PROFILE" --dry-run
-  step super-agent-installer install --yes --profile "$SAI_PROFILE"
+  echo; echo "--- $SAI_IMAGE: super-agent-installer install --yes --profile $SAI_PROFILE --no-login"
+  out=$(super-agent-installer install --yes --profile "$SAI_PROFILE" --no-login) || { echo "$out"; echo "FAILED: $SAI_IMAGE install"; exit 1; }
+  echo "$out"
+  if printf "%s\n" "$out" | grep -E "^- (npm |setx |run \`claude\`|run \`codex\`)"; then
+    echo "FAILED: $SAI_IMAGE: Next steps contained an entry that should have run automatically"; exit 1
+  fi
   step super-agent-installer check
   step super-agent-installer update --no-self-update --yes
 '

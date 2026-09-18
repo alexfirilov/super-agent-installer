@@ -31,17 +31,23 @@ Proxmox host (root, no sudo):
     super-agent-installer self-update   update the installer binary only
     super-agent-installer uninstall [id...]
 
-Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update.
+Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate.
+
+- `--no-login` skips the sign-in phase entirely (see below); use it on a host with no browser, or when you already manage auth yourself.
+- `--no-persist-secrets` leaves pasted API keys in memory for this run only, instead of saving them to the user environment.
+- `--elevate` (Windows only) allows a machine-scope winget install, which triggers one UAC prompt. Without it, installs stay per-user (scoop / `winget --scope user` / npm / a per-user script) and never prompt for admin.
+
+## Sign-in
+
+Right after you confirm the picker, the installer signs each selected agent in for you: it detects an existing session (`claude auth status` / `codex login status`), and if neither is signed in it opens the vendor's own interactive login and waits for it to finish. On a headless host (no display, SSH, or an LXC container) it falls back to `claude setup-token` / `codex login --device-auth` instead of trying to open a browser. A component that needs an agent that never signed in (for example, a remote Codex plugin catalog that needs a ChatGPT login) is skipped with a one-line reason rather than failing later. Pass `--no-login` to skip this phase and sign in yourself afterwards.
 
 ## What it manages
 
-See `docs/research/CATALOG.md` for the full ranked catalog and `manifest.json` for the exact components. Secrets are never written to disk: the installer prompts for API keys only when a command needs them and otherwise prints the `export`/`setx` lines to run.
+See `docs/research/CATALOG.md` for the full ranked catalog and `manifest.json` for the exact components. The installer prompts for API keys only when a selected component needs one, validates them against the provider's API (and reports GitHub PAT scopes) before continuing, then persists them to the OS user environment so every new shell and every agent can see them: on Windows via `[Environment]::SetEnvironmentVariable(name, value, 'User')`; on POSIX in a dedicated `0600` file (`${XDG_CONFIG_HOME:-~/.config}/super-agent-installer/secrets.env`) that `~/.profile` (and `~/.zshrc`, if present) source with a guarded line -- the key value itself is never written into either rc file. Pass `--no-persist-secrets` to keep a key in memory for this run only.
 
 ## After install
 
-- `claude` once to log in (headless: `claude setup-token` then export `CLAUDE_CODE_OAUTH_TOKEN`)
-- `codex login` (headless: `codex login --device-auth`)
-- Codex: run `/hooks` once to trust caveman hooks if you enabled them
+Everything above -- sign-in, key validation and persistence, and installing agent-browser's own CLI -- happens inside the run. What's left is advisory only, and only when it applies: restart any Claude Code session that was already running when the plugin/settings changes landed, and if you enabled the caveman Codex hooks, run `/hooks` once inside Codex to trust them.
 
 ## Development
 
