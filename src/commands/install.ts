@@ -30,22 +30,32 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.claudeRunning) ctx.log.warn('a claude session is running; agent updates will be skipped and plugin changes need a restart');
   for (const e of sel.excluded) ctx.log.debug(`excluded ${e.id}: ${e.reason}`);
   ctx.log.info(`profile ${sel.profile}: ${sel.components.length} components, Claude always-on tokens ~${sel.tokenTotals.claude}, Codex MCP servers ${sel.codexMcpCount}`);
-  if (!ctx.dryRun && !o.noLogin) {
-    const agents = await agentsToSignIn(ctx, sel.components);
-    if (agents.length) {
-      const results = await ensureAuth(ctx, agents, { headless: isHeadless(ctx) });
-      ctx.auth = { ...ctx.auth, ...Object.fromEntries(results.map((r) => [r.agent, r])) };
+  /** Sign-in + secrets, exactly once per run. It cannot run before the components: on a clean host `claude`/`codex`
+   * do not exist yet, so every probe would ENOENT and both sign-ins would "fail". It must not run later than this
+   * either: `ctx.auth` gates the codex-plugin group, and MCP specs substitute `${VAR}` when their group is planned.
+   * So it runs immediately after the `agent` group installed the agents (`afterKind` below), or before the loop when
+   * this selection installs no agent because both are already on the host. */
+  let signedIn = false;
+  const signInAndSecrets = async (): Promise<void> => {
+    if (signedIn) return; signedIn = true;
+    if (!o.noLogin) {
+      const agents = await agentsToSignIn(ctx, sel.components);
+      if (agents.length) {
+        const results = await ensureAuth(ctx, agents, { headless: isHeadless(ctx) });
+        ctx.auth = { ...ctx.auth, ...Object.fromEntries(results.map((r) => [r.agent, r])) };
+      }
     }
-  }
-  if (!ctx.dryRun) await promptSecrets(ctx, sel.components); // before planning: MCP specs substitute ${VAR} at plan time
-  if (!ctx.dryRun && !o.noPersistSecrets && ctx.secrets.size) {
-    ctx.secretsPersist = await persistSecrets(ctx, ctx.secrets); // after promptSecrets, so it covers everything in ctx.secrets including a captured CLAUDE_CODE_OAUTH_TOKEN
-    for (const f of ctx.secretsPersist.failed) ctx.log.warn(`could not persist ${f.name} to the user environment: ${f.reason}`);
-  }
+    await promptSecrets(ctx, sel.components);
+    if (!o.noPersistSecrets && ctx.secrets.size) {
+      ctx.secretsPersist = await persistSecrets(ctx, ctx.secrets); // after promptSecrets, so it covers everything in ctx.secrets including a captured CLAUDE_CODE_OAUTH_TOKEN
+      for (const f of ctx.secretsPersist.failed) ctx.log.warn(`could not persist ${f.name} to the user environment: ${f.reason}`);
+    }
+  };
   const preview = await buildPlan(sel, ctx, 'install', { preview: true });
   if (!o.json) console.log(renderPlan(preview.actions));
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
-  const result = await executeGrouped(sel, ctx, 'install');
+  if (!sel.components.some((c) => c.kind === 'agent')) await signInAndSecrets();
+  const result = await executeGrouped(sel, ctx, 'install', { afterKind: (kind) => (kind === 'agent' ? signInAndSecrets() : undefined) });
   if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
   await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
   return result.failed ? 1 : 0;

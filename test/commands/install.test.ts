@@ -147,3 +147,48 @@ describe('runInstall secret persistence wiring', () => {
     expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
   });
 });
+
+// C1: on a clean host `claude`/`codex` do not exist when the run starts, so the sign-in + secrets block has to run
+// after the `agent` kind group installed them -- and still run at all when no agent component is selected.
+describe('runInstall sign-in ordering (C1)', () => {
+  const quietLogs = async (fn: () => Promise<number>): Promise<{ code: number; logs: string[] }> => {
+    const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
+    try { return { code: await fn(), logs }; } finally { console.log = orig; }
+  };
+  it('signs the agent in only after the agent group installed it, and before its dependents run', async () => {
+    clearProviders(); const f = registerFreshHost();
+    const ctx = makeTestCtx({ manifest: freshManifest });
+    const base = ctx.run;
+    let ranAtAuth: string[] | null = null;
+    ctx.run = async (argv, opts) => {
+      const key = argv.join(' ');
+      if (key === 'claude --version') return f.installed() ? { code: 0, stdout: '2.0.0', stderr: '', skipped: false } : { code: 127, stdout: '', stderr: 'not found', skipped: false };
+      if (key === 'claude auth status') {
+        if (ranAtAuth === null) ranAtAuth = [...f.ran];
+        return f.installed() ? { code: 0, stdout: 'Logged in as demo@example.com', stderr: '', skipped: false } : { code: 127, stdout: '', stderr: 'not found', skipped: false };
+      }
+      return base(argv, opts);
+    };
+    const { code } = await quietLogs(() => runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' }));
+    expect(code).toBe(0);
+    expect(ranAtAuth).toEqual(['claude-code']); // after the agent installed, before cp-x / mcp-y
+    expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
+    expect(f.ran).toEqual(['claude-code', 'cp-x', 'mcp-y']);
+  });
+  it('finishes the secrets block before the mcp group is planned (MCP specs substitute ${VAR} at plan time)', async () => {
+    clearProviders(); const f = registerFreshHost();
+    let persistedAtMcpPlan: boolean | null = null;
+    registerProvider({ kind: 'mcp', detect: async () => null, plan: async (c, ctx) => { persistedAtMcpPlan = ctx.secretsPersist !== undefined; return [action(c.id, 'install', `install ${c.id}`, async () => { f.ran.push(c.id); return { ok: true, changed: true, message: 'done' }; })]; } });
+    const ctx = makeTestCtx({ manifest: freshManifest, secrets: { X_TOKEN: 'typed' }, responses: { 'claude auth status': 'Logged in as demo@example.com' } });
+    await quietLogs(() => runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' }));
+    expect(persistedAtMcpPlan).toBe(true);
+  });
+  it('still runs the block when no agent-kind component is selected', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
+    const ctx = makeTestCtx({ manifest, secrets: { X_TOKEN: 'typed' }, responses: { 'claude --version': 'claude 2.0.0', 'claude auth status': 'Logged in as demo@example.com' } });
+    await quietLogs(() => runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' }));
+    expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
+    expect(ctx.secretsPersist?.persisted).toEqual(['X_TOKEN']);
+  });
+});

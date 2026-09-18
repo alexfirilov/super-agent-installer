@@ -39,7 +39,7 @@ Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, -
 
 ## Sign-in
 
-Right after you confirm the picker, the installer signs each selected agent in for you: it detects an existing session (`claude auth status` / `codex login status`), and if neither is signed in it opens the vendor's own interactive login and waits for it to finish. On a headless host (no display, SSH, or an LXC container) it falls back to `claude setup-token` / `codex login --device-auth` instead of trying to open a browser. A component that needs an agent that never signed in (for example, a remote Codex plugin catalog that needs a ChatGPT login) is skipped with a one-line reason rather than failing later. Pass `--no-login` to skip this phase and sign in yourself afterwards.
+As soon as the agents themselves are installed (and before anything that needs them), the installer signs each selected agent in for you: it detects an existing session (`claude auth status` / `codex login status`), and if neither is signed in it opens the vendor's own interactive login and waits for it to finish. On a headless host (no display, SSH, or an LXC container) it falls back to `claude setup-token` / `codex login --device-auth` instead of trying to open a browser. A component that needs an agent that never signed in (for example, a remote Codex plugin catalog that needs a ChatGPT login) is skipped with a one-line reason rather than failing later. Pass `--no-login` to skip this phase and sign in yourself afterwards.
 
 ## What it manages
 

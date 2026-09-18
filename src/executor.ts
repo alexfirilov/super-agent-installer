@@ -31,8 +31,11 @@ export async function refreshEnvironment(ctx: Ctx): Promise<void> {
   if (ctx.env !== process.env) extendPath(ctx.host, ctx.env);
   if (added.length) ctx.log.debug(`PATH += ${added.join(', ')}`);
 }
-/** Real runs: plan and execute one KIND_ORDER group at a time, so plugins/MCP/skills are planned only after the agents and tools they need exist. */
-export async function executeGrouped(sel: Selection, ctx: Ctx, mode: Mode, opts: { onStep?: (rec: StepRecord) => void; refresh?: (ctx: Ctx) => void | Promise<void> } = {}): Promise<ExecResult & { plan: Plan }> {
+/** Real runs: plan and execute one KIND_ORDER group at a time, so plugins/MCP/skills are planned only after the agents and tools they need exist.
+ * `afterKind` fires once per non-empty group, after its actions ran and after the PATH refresh their `afterEach` did
+ * -- that is where `runInstall` signs the agents in, since on a clean host their binaries only exist from the `agent`
+ * group onwards. */
+export async function executeGrouped(sel: Selection, ctx: Ctx, mode: Mode, opts: { onStep?: (rec: StepRecord) => void; refresh?: (ctx: Ctx) => void | Promise<void>; afterKind?: (kind: Kind, ctx: Ctx) => void | Promise<void> } = {}): Promise<ExecResult & { plan: Plan }> {
   const refresh = opts.refresh ?? refreshEnvironment;
   const plan: Plan = { actions: [], detections: {} }; const records: StepRecord[] = [];
   for (const kind of kindOrder(mode)) {
@@ -41,6 +44,7 @@ export async function executeGrouped(sel: Selection, ctx: Ctx, mode: Mode, opts:
     plan.actions.push(...group.actions); Object.assign(plan.detections, group.detections);
     const r = await executePlan(group, ctx, { onStep: opts.onStep, afterEach: REFRESH_AFTER.has(kind) ? () => refresh(ctx) : undefined });
     records.push(...r.records);
+    await opts.afterKind?.(kind, ctx);
   }
   return { plan, records, failed: records.filter((r) => !r.ok).length, changed: records.filter((r) => r.ok && r.changed).length };
 }
