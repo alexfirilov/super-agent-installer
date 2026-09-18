@@ -1,0 +1,9 @@
+- generic [ref=f21e3]:
+  - heading "Signed in to Codex" [level=1] [ref=f21e44]
+  - generic [ref=f21e45]: You may now close this page
+  - generic [ref=f21e40]:
+    - link "Terms of Use" [ref=f21e41] [cursor=pointer]:
+      - /url: https://openai.com/policies/terms-of-use
+    - generic [ref=f21e42]: "|"
+    - link "Privacy Policy" [ref=f21e43] [cursor=pointer]:
+      - /url: https://openai.com/policies/privacy-policy

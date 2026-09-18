@@ -47,11 +47,25 @@ describe('refreshEnvironment', () => {
     const before = await getClaudeState(ctx); expect(before.installed).toBe(true);
     ctx.calls.length = 0;
     process.env.PATH = '/usr/bin';
-    refreshEnvironment(ctx);
+    await refreshEnvironment(ctx);
     const home = ctx.host.home; const goBin = `${process.env.GOPATH ?? `${home}/go`}/bin`;
-    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:/usr/local/bin:/usr/bin`);
-    refreshEnvironment(ctx);
-    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:/usr/local/bin:/usr/bin`);
+    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:${home}/.local/go/bin:/usr/local/bin:/usr/bin`);
+    await refreshEnvironment(ctx);
+    expect(process.env.PATH).toBe(`${home}/.local/bin:${home}/.local/share/fnm:${home}/.local/share/fnm/aliases/default/bin:${goBin}:${home}/.local/go/bin:/usr/local/bin:/usr/bin`);
     await getClaudeState(ctx); expect(ctx.calls.some((a) => a.join(' ') === 'claude --version')).toBe(true); // re-detected
+  });
+  it('also merges any registry PATH entry missing from process.env.PATH on Windows, exactly once across two calls', async () => {
+    const registryPath = 'C:\\Program Files\\Go\\bin;C:\\Users\\u\\AppData\\Roaming\\npm';
+    const psProbe = ['powershell', '-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"].join(' ');
+    const ctx = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, responses: { [psProbe]: registryPath } });
+    process.env.PATH = 'C:\\Windows\\system32';
+    await refreshEnvironment(ctx);
+    expect(process.env.PATH).toContain('C:\\Program Files\\Go\\bin');
+    expect(process.env.PATH).toContain('C:\\Users\\u\\AppData\\Roaming\\npm');
+    const afterFirst = process.env.PATH;
+    await refreshEnvironment(ctx);
+    expect(process.env.PATH).toBe(afterFirst); // idempotent: no duplicates across two calls
+    const parts = (process.env.PATH ?? '').split(';').map((p) => p.toLowerCase());
+    expect(new Set(parts).size).toBe(parts.length); // exactly once each, across two calls
   });
 });

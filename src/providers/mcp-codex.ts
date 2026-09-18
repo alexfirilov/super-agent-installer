@@ -19,7 +19,7 @@ import { getCodexState } from './codex-plugin.js';
 import { tomlTableEquals, placeTomlMarkerBlock, TomlError } from '../config/toml.js';
 import { backupFile, writeTextAtomic } from '../config/json.js';
 import { action, ok, fail, skipAction } from './types.js';
-import { secretHints, substituteSpec } from './mcp-shared.js';
+import { secretHints, substituteSpec, runMcpPostInstall } from './mcp-shared.js';
 import { MARKER_STYLES, extractMarkerBlock, removeMarkerBlock } from '../config/markers.js';
 
 export const ENV_VARS_SUPPORTED = true;
@@ -86,6 +86,8 @@ export const mcpCodexProvider: Provider = {
       let note = '';
       if (Object.keys(extra).length) { const r = await patchCodexTable(ctx, spec.name, extra); if (!r.applied) note = ` config.toml has comments, so extra keys were not written automatically. Add under [mcp_servers.${spec.name}]:\n${r.manual}`; }
       const chk = await ctx.run(['codex', 'mcp', 'get', spec.name, '--json'], { readOnly: true, allowFailure: true }); if (chk.code !== 0 && !ctx.dryRun) return fail(`codex cannot read ${spec.name} after write: ${(chk.stderr || chk.stdout).trim()}`);
+      const post = await runMcpPostInstall(spec, ctx);
+      if (post) return fail(post);
       return ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`);
     })];
   },

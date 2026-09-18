@@ -53,4 +53,16 @@ describe('runner', () => {
     expect(r).toMatchObject({ code: 0, stdout: 'done' }); expect(r.stopped).toBeFalsy();
   });
   it('quotes argv for display', () => { expect(quoteArgv(['a', 'b c', "d'e"])).toBe(`a 'b c' 'd'\\''e'`); });
+  it('interactive mode inherits the terminal: ignores piped input and captures no output', async () => {
+    const run = createRunner({ dryRun: false, log: createLogger({}) });
+    const r = await run([node, '-e', 'let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{process.stdout.write(d); process.exit(0)}); setTimeout(()=>process.exit(0),200);'], { interactive: true, input: 'hello', timeoutMs: 5000 });
+    expect(r).toMatchObject({ code: 0, stdout: '', stderr: '', skipped: false });
+  });
+  it('skips an interactive command in dry-run unless readOnly', async () => {
+    const run = createRunner({ dryRun: true, log: createLogger({}) });
+    const skipped = await run([node, '-e', 'process.exit(0)'], { interactive: true });
+    expect(skipped).toMatchObject({ code: 0, stdout: '', stderr: '', skipped: true });
+    const ran = await run([node, '-e', 'process.exit(0)'], { interactive: true, readOnly: true });
+    expect(ran).toMatchObject({ code: 0, stdout: '', stderr: '', skipped: false });
+  });
 });

@@ -14,11 +14,14 @@ export type Channel = 'latest' | 'stable';
 export interface AgentSpec { kind: 'agent'; agent: 'claude' | 'codex' }
 export interface ClaudePluginSpec { kind: 'claude-plugin'; marketplace: string; marketplaceSource?: string; plugin: string; action?: 'install' | 'disable' | 'uninstall' }
 export interface CodexPluginSpec { kind: 'codex-plugin'; marketplace: string; marketplaceSource: string; plugin: string }
-export interface SkillSpec { kind: 'skill'; repo: string; skills: string[] | '*'; targets: Array<'claude-code' | 'codex'> }
+export interface SkillSpec { kind: 'skill'; repo: string; skills: string[] | '*'; targets: Array<'claude-code' | 'codex'>; postInstall?: string[][] }
 export interface McpSpec {
   kind: 'mcp'; target: 'claude' | 'codex'; name: string; transport: 'http' | 'stdio';
   url?: string; bearerEnv?: string; command?: string; args?: string[]; env?: Record<string, string>;
   secretEnv?: string[]; extra?: Record<string, unknown>; oauth?: { clientId: string; callbackPort: number };
+  /** Commands to run after the server is configured, like `SkillSpec.postInstall` -- e.g. `claude mcp login <name>`
+   * for a server whose auth is a browser OAuth flow. Run with inherited stdio, so the user can complete it there. */
+  postInstall?: string[][];
 }
 export interface ToolPackages {
   apt?: string; dnf?: string; apk?: string; pacman?: string; zypper?: string; brew?: string; winget?: string; scoop?: string; choco?: string;
@@ -49,25 +52,44 @@ export interface HostInfo {
   platform: Platform; arch: Arch; isRoot: boolean; hasSudo: boolean; pkgManager: PkgManager; isWsl: boolean; isProxmoxHost: boolean;
   isLxc: boolean; isNixOS: boolean; isMusl: boolean; hasAvx: boolean | null; hasBwrap: boolean; home: string; diskFreeMb: number | null;
   claudeRunning: boolean; windowsDeveloperMode: boolean | null; osRelease: Record<string, string>;
+  /** Windows: the `WindowsPrincipal.IsInRole(Administrator)` probe (true = running elevated); `null` off Windows. */
+  isElevated: boolean | null;
 }
 export interface Paths { claudeConfigDir: string; claudeSettings: string; claudeJson: string; claudeMd: string; claudeHooksDir: string; codexHome: string; codexConfig: string; codexHooks: string; codexAgentsMd: string; agentsSkillsDir: string; stateDir: string; stateFile: string; backupsDir: string; logFile: string }
 
-/** `stopOnOutput`: kill the child as soon as its combined output matches (for vendor CLIs that finish their work and then block on an interactive step, e.g. `codex mcp add --url` starting a browser OAuth flow); the result then has `stopped: true` and exit 0. */
-export interface RunOptions { cwd?: string; env?: Record<string, string>; input?: string; timeoutMs?: number; readOnly?: boolean; allowFailure?: boolean; shell?: boolean; stopOnOutput?: RegExp }
+/**
+ * `stopOnOutput`: kill the child as soon as its combined output matches (for vendor CLIs that finish their work and
+ * then block on an interactive step, e.g. `codex mcp add --url` starting a browser OAuth flow); the result then has
+ * `stopped: true` and exit 0.
+ * `interactive`: spawn with `stdio: 'inherit'` so the command owns the real terminal (needed for `claude auth login`
+ * / `codex login`, which prompt directly). No output is captured either way — `stdout`/`stderr` come back empty —
+ * and `input` is not piped in. Still honours `timeoutMs`, and still respects `dryRun` (skipped unless `readOnly`).
+ * Mutually exclusive with `stopOnOutput` (nothing is captured to match against); if both are set, `interactive`
+ * wins and `stopOnOutput` is ignored.
+ */
+export interface RunOptions { cwd?: string; env?: Record<string, string>; input?: string; timeoutMs?: number; readOnly?: boolean; allowFailure?: boolean; shell?: boolean; stopOnOutput?: RegExp; interactive?: boolean }
 export interface RunResult { code: number; stdout: string; stderr: string; skipped: boolean; stopped?: boolean }
 export type Runner = (argv: string[], opts?: RunOptions) => Promise<RunResult>;
 export interface Logger { info(msg: string): void; warn(msg: string): void; error(msg: string): void; debug(msg: string): void; step(msg: string): void }
 
+export type AuthState = { agent: 'claude' | 'codex'; authenticated: boolean; mode: string | null; detail: string };
+
 export interface Ctx {
   host: HostInfo; paths: Paths; run: Runner; log: Logger; dryRun: boolean; yes: boolean; noAudit: boolean; channel: Channel;
   secrets: Map<string, string>; fetch: typeof fetch; env: Record<string, string | undefined>; manifest: Manifest;
+  /** From `--elevate` (default false). When false on Windows, installs must stay per-user (scoop / `winget --scope user` / npm / script) and never trigger UAC. */
+  elevate: boolean;
+  auth?: Partial<Record<'claude' | 'codex', AuthState>>;
+  secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
 }
 export interface Installed { version: string | null; details?: Record<string, unknown> }
 export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'configure';
-export interface ActionResult { ok: boolean; message: string; changed: boolean }
+/** `blocked`: the component did nothing because an agent it needs never signed in. Reported separately from an
+ * ordinary skip -- it stays in the summary table and makes the run exit non-zero (D1). */
+export interface ActionResult { ok: boolean; message: string; changed: boolean; blocked?: boolean }
 export interface Action { id: string; componentId: string; op: Op; description: string; from?: string | null; to?: string | null; blockedBy?: string[]; run: (ctx: Ctx) => Promise<ActionResult> }
 export type Mode = 'install' | 'update' | 'uninstall';
 export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
 export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
-export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; from?: string | null; to?: string | null }
+export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null }
 export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, { version: string | null; at: string }>; lastRun: string }

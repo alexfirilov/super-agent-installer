@@ -56,6 +56,10 @@ export const skillProvider: Provider = {
         const lock = await readSkillLock(join(ctx.host.home, '.agents', '.skill-lock.json'));
         if (Object.keys(lock).length) { const missing = named.filter((s) => !lock[s]); if (missing.length) return fail(`skills add reported success but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not in ~/.agents/.skill-lock.json: no skill with that name in ${spec.repo}?`); }
       }
+      for (const post of spec.postInstall ?? []) {
+        const pr = await ctx.run(post, { allowFailure: true, timeoutMs: 600000 });
+        if (pr.code !== 0) return fail(`post-install command failed (exit ${pr.code}): ${post.join(' ')}${(pr.stderr || pr.stdout).trim() ? ` - ${(pr.stderr || pr.stdout).trim()}` : ''}`);
+      }
       return ok(`installed ${named ? named.join(', ') : spec.repo}`);
     })];
   },

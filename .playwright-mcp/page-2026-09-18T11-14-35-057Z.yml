@@ -1,0 +1,31 @@
+- generic [ref=f21e3]:
+  - heading "Use your device code to grant access to Codex CLI" [level=1] [ref=f21e9]
+  - generic [ref=f21e10]:
+    - generic [ref=f21e12]:
+      - generic [ref=f21e13]: Enter the 9-character code displayed in your terminal
+      - generic [ref=f21e14]:
+        - generic [ref=f21e15]:
+          - textbox "Code character 1 of 9" [active] [ref=f21e16]
+          - textbox "Code character 2 of 9" [ref=f21e17]
+          - textbox "Code character 3 of 9" [ref=f21e18]
+          - textbox "Code character 4 of 9" [ref=f21e19]
+        - generic [aria-hidden]: "-"
+        - generic [ref=f21e20]:
+          - textbox "Code character 5 of 9" [ref=f21e21]
+          - textbox "Code character 6 of 9" [ref=f21e22]
+          - textbox "Code character 7 of 9" [ref=f21e23]
+          - textbox "Code character 8 of 9" [ref=f21e24]
+          - textbox "Code character 9 of 9" [ref=f21e25]
+      - generic [ref=f21e26]:
+        - generic [ref=f21e27]: Security warning
+        - generic [ref=f21e31]: Device codes are a common phishing target and can be used to sign in to your account. Never share this code. Continue only if you started this sign-in from Codex CLI.
+        - generic [ref=f21e32]: If you weren’t expecting this page or got this link from someone else, close this tab.
+    - generic [ref=f21e34]:
+      - button "Cancel" [ref=f21e36] [cursor=pointer]
+      - button "Continue" [disabled] [ref=f21e38]
+  - generic [ref=f21e40]:
+    - link "Terms of Use" [ref=f21e41] [cursor=pointer]:
+      - /url: https://openai.com/policies/terms-of-use
+    - generic [ref=f21e42]: "|"
+    - link "Privacy Policy" [ref=f21e43] [cursor=pointer]:
+      - /url: https://openai.com/policies/privacy-policy

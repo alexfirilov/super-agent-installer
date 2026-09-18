@@ -18,6 +18,15 @@ describe('mcpCodexProvider', () => {
     const same = ctxWith('[mcp_servers.gh]\nurl = "https://api.githubcopilot.com/mcp/readonly"\nbearer_token_env_var = "GITHUB_PAT_TOKEN"\n');
     expect(await mcpCodexProvider.plan(c, same, await mcpCodexProvider.detect(c, same), 'install')).toEqual([]);
   });
+  // Concern B: the HA OAuth login is an action, not a hint.
+  it('runs the spec postInstall interactively after a successful add', async () => {
+    const c = mcp({ name: 'homeassistant', url: 'https://ha/api/mcp', postInstall: [['codex', 'mcp', 'login', 'homeassistant']] });
+    const ctx = ctxWith('', { 'codex mcp add homeassistant --url https://ha/api/mcp': '', 'codex mcp get homeassistant --json': '{}', 'codex mcp login homeassistant': '' });
+    const r = await (await mcpCodexProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['codex', 'mcp', 'login', 'homeassistant']);
+    expect(ctx.opts.find((o) => o.argv.join(' ') === 'codex mcp login homeassistant')?.opts.interactive).toBe(true);
+  });
   it('adds stdio servers with --env and -- separator, then patches extra keys into a comment-free file', async () => {
     const c = mcp({ name: 'c7', transport: 'stdio', command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: { A: '1' }, extra: { startup_timeout_sec: 20 } });
     const ctx = ctxWith('model = "gpt-5.6-sol"\n', { 'codex mcp add c7 --env A=1 -- npx -y @upstash/context7-mcp': '', 'codex mcp get c7 --json': '{}' });

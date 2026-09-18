@@ -7,6 +7,7 @@ import { isNewer, normalizeVersion } from '../version/compare.js';
 import { NODE_MAJOR } from '../pins.js';
 import { action, ok, fail } from './types.js';
 import { memo } from '../exec/memo.js';
+import { extendPathWith } from '../exec/path.js';
 
 function sudo(ctx: Ctx, argv: string[]): string[] | null {
   if (ctx.host.isRoot) return argv;
@@ -26,6 +27,7 @@ async function aptUpdateOnce(ctx: Ctx, cmd: string[]): Promise<void> {
   await ctx.run(sudo(ctx, ['apt-get', 'update']) ?? ['apt-get', 'update'], { allowFailure: true, timeoutMs: 600000 });
 }
 
+/** POSIX + generic package-manager routing (apt/dnf/yum/pacman/zypper/apk/brew). Windows is routed separately by `windowsUserRoute`/`windowsElevatedRoute` below, since the right route there depends on `ctx.elevate`, not just the detected `pkgManager`. */
 function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo' {
   const pm = ctx.host.pkgManager;
   const s = (argv: string[]) => sudo(ctx, argv) ?? 'nosudo';
@@ -36,8 +38,66 @@ function pmInstall(ctx: Ctx, p: ToolSpec['packages']): string[] | null | 'nosudo
     case 'zypper': return p.zypper ? s(['zypper', '--non-interactive', 'install', ...split(p.zypper)]) : null;
     case 'apk': return p.apk ? s(['apk', 'add', '--no-cache', ...split(p.apk)]) : null;
     case 'brew': return p.brew ? ['brew', 'install', ...split(p.brew)] : null;
+    default: return null;
+  }
+}
+
+/** Winget packages whose manifest actually declares `Scope: user` (research dossier D2, from real winget-pkgs manifests). Every other winget package is machine-only and needs admin — do not guess at more of these. */
+const WINGET_USER_SCOPE_IDS = new Set<string>(['Git.Git']);
+
+/**
+ * Probes for scoop, bootstrapping it via the official installer if missing. Scoop's own installer refuses to run in
+ * an elevated shell, so this refuses upfront too rather than letting the bootstrap command fail opaquely.
+ * Returns `true` on success, or a string describing why scoop could not be used.
+ */
+async function ensureScoop(ctx: Ctx): Promise<true | string> {
+  if (ctx.host.isElevated) return 'scoop rejects elevated shells; rerun without admin, or use --elevate';
+  if ((await ctx.run(['scoop', '--version'], { readOnly: true, allowFailure: true })).code === 0) return true;
+  const r = await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm get.scoop.sh | iex'], { timeoutMs: 600000, allowFailure: true });
+  return r.code === 0 ? true : `failed to bootstrap scoop: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`}`;
+}
+
+/**
+ * Windows install route when `--elevate` was NOT passed: scoop first (bootstrapping it if absent), then
+ * `winget --scope user` for the small allow-list of packages that actually support it, then `null` so the
+ * generic npm/script fallback in `plan()` gets a turn. Returns `'needs-admin'` only when none of those apply
+ * and the package's only route left is a machine-scope winget install — the caller must not invoke winget then.
+ */
+async function windowsUserRoute(ctx: Ctx, p: ToolSpec['packages']): Promise<string[] | 'needs-admin' | null> {
+  if (p.scoop) {
+    const s = await ensureScoop(ctx);
+    if (s === true) return ['scoop', 'install', ...split(p.scoop)];
+    ctx.log.warn(`scoop unavailable (${s}); trying the next install route`);
+  }
+  if (p.winget && WINGET_USER_SCOPE_IDS.has(p.winget)) return ['winget', 'install', '--id', p.winget, '--scope', 'user', '--silent', '--accept-source-agreements', '--accept-package-agreements'];
+  if (p.winget && !p.npm && !p.script?.windows) return 'needs-admin';
+  return null;
+}
+
+/**
+ * True when the machine-scope route is the right one: `--elevate` was passed, or this shell is ALREADY elevated.
+ * D3 forbids *requesting* elevation without `--elevate`; it does not require us to refuse admin rights we were
+ * handed. Without this, a user who opened an admin terminal -- the ordinary way people run an installer on Windows
+ * -- got `jq`, `ripgrep`, `gh`, `go`, `uv`, `pwsh` and `node` all failing with "rerun with --elevate" while already
+ * being admin, because scoop's installer refuses elevated shells. No UAC prompt can appear on this path: the
+ * process already holds the token.
+ */
+function useAdminRoute(ctx: Ctx): boolean { return ctx.elevate || ctx.host.isElevated === true; }
+
+/**
+ * Windows install route when the machine-scope route applies (see `useAdminRoute`): keyed off the package manager
+ * `detect/host.ts` actually found on PATH. Never route to a package manager that is not installed -- GCE QA on
+ * Windows Server 2022, which ships no winget, had every single tool fail with
+ * `Executable not found in $PATH: "winget"`, and losing git that way took every plugin down with it.
+ */
+function windowsElevatedRoute(ctx: Ctx, p: ToolSpec['packages']): string[] | null {
+  switch (ctx.host.pkgManager) {
     case 'winget': return p.winget ? ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'] : null;
-    case 'scoop': return p.scoop ? ['scoop', 'install', ...split(p.scoop)] : null;
+    case 'scoop': {
+      if (!p.scoop) return null;
+      if (ctx.host.isElevated) { ctx.log.warn('scoop is the only package manager here and it refuses to run elevated; rerun in a normal (non-admin) terminal'); return null; }
+      return ['scoop', 'install', ...split(p.scoop)];
+    }
     case 'choco': return p.choco ? ['choco', 'install', '-y', ...split(p.choco)] : null;
     default: return null;
   }
@@ -67,30 +127,117 @@ async function npmUninstall(ctx: Ctx, pkgs: string[]): Promise<void> {
   if (ctx.host.platform !== 'windows' && (await Promise.all(pkgs.map((p) => stat(join(local, 'lib', 'node_modules', p)).then(() => true, () => false)))).some(Boolean)) await ctx.run(['npm', 'uninstall', '-g', '--prefix', local, ...pkgs], { allowFailure: true });
 }
 
-async function installNode(ctx: Ctx): Promise<string | null> {
+type NodeInstallResult = { ok: true; note: string | null } | { ok: false; message: string };
+
+/**
+ * Where fnm actually put node. `fnm default <major>` only moves an alias: it writes neither the registry PATH nor
+ * any directory `toolDirs` can know the version of, so without this every `prerequisites: ['node']` component in the
+ * same run would still fail to find `node`. Asking fnm itself beats guessing the layout.
+ * The dirname is cut by hand rather than with `path.dirname`, which is POSIX-only in this process and would return
+ * `.` for the `C:\...\node.exe` this returns on Windows.
+ */
+async function fnmNodeDir(ctx: Ctx): Promise<string | null> {
+  const r = await ctx.run(['fnm', 'exec', '--using=default', '--', 'node', '-p', 'process.execPath'], { readOnly: true, allowFailure: true });
+  if (r.code !== 0) return null;
+  const exe = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean).pop();
+  if (!exe) return null;
+  const cut = Math.max(exe.lastIndexOf('\\'), exe.lastIndexOf('/'));
+  return cut > 0 ? exe.slice(0, cut) : null;
+}
+/** Makes `dir` visible to every later command in this run (the child runner inherits process.env, providers read ctx.env). */
+function addToRunPath(ctx: Ctx, dir: string): void {
+  extendPathWith(ctx.host, process.env, [dir]);
+  if (ctx.env !== process.env) extendPathWith(ctx.host, ctx.env, [dir]);
+}
+
+async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
   const h = ctx.host;
   if (h.platform === 'windows') {
+    if (!useAdminRoute(ctx)) {
+      const s = await ensureScoop(ctx);
+      if (s !== true) return { ok: false, message: `needs admin: rerun with --elevate, or install ${name} yourself (${s})` };
+      await ctx.run(['scoop', 'install', 'fnm']);
+      await ctx.run(['fnm', 'install', String(NODE_MAJOR)], { timeoutMs: 600000 });
+      await ctx.run(['fnm', 'default', String(NODE_MAJOR)], { timeoutMs: 600000 });
+      const dir = await fnmNodeDir(ctx);
+      if (!dir) return { ok: true, note: `Node ${NODE_MAJOR} installed with fnm, but its directory could not be resolved from \`fnm exec --using=default -- node -p process.execPath\`; open a new shell (or run \`fnm env --use-on-cd | Invoke-Expression\`) so it's picked up.` };
+      addToRunPath(ctx, dir);
+      return { ok: true, note: null };
+    }
     await ctx.run(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
-    return null;
+    return { ok: true, note: null };
   }
   if (h.platform === 'darwin') {
     await ctx.run(['brew', 'install', `node@${NODE_MAJOR}`]);
     await ctx.run(['brew', 'link', '--overwrite', '--force', `node@${NODE_MAJOR}`], { allowFailure: true });
-    return null;
+    return { ok: true, note: null };
   }
   if ((h.isRoot || h.isProxmoxHost) && h.pkgManager === 'apt') {
     await ctx.run(['bash', '-c', `curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs`], { timeoutMs: 600000 });
-    return null;
+    return { ok: true, note: null };
   }
   if (h.isRoot && h.pkgManager) {
     const cmd = pmInstall(ctx, { dnf: 'nodejs npm', pacman: 'nodejs npm', apk: 'nodejs npm', zypper: 'nodejs22 npm22' });
-    if (cmd && cmd !== 'nosudo') { await ctx.run(cmd); return null; }
+    if (cmd && cmd !== 'nosudo') { await ctx.run(cmd); return { ok: true, note: null }; }
   }
-  await ctx.run(['bash', '-c', 'curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell'], { timeoutMs: 600000 });
-  const fnm = join(h.home, '.local', 'share', 'fnm', 'fnm');
+  const dir = (await installNodeViaFnm(ctx)) ?? (await installNodeFromTarball(ctx));
+  if (!dir) return { ok: false, message: `could not install ${name}: fnm needs unzip (absent, and not installable without root here) and the nodejs.org tarball fallback did not produce a usable node` };
+  addToRunPath(ctx, dir);
+  return { ok: true, note: null };
+}
+
+/**
+ * fnm's install script hard-requires `unzip` and, when it is missing, prints "Not installing fnm due to missing
+ * dependencies" -- on some images while still exiting 0. Rocky 9 and Ubuntu 24.04 cloud images ship without unzip,
+ * so every non-root user on those hosts silently ended up with no node and no npm, which then failed every
+ * npm-installed component. Install unzip first when we can, and never trust the script's exit code: verify the
+ * binary landed.
+ */
+async function ensureUnzip(ctx: Ctx): Promise<boolean> {
+  if ((await ctx.run(['unzip', '-v'], { readOnly: true, allowFailure: true })).code === 0) return true;
+  const cmd = pmInstall(ctx, { apt: 'unzip', dnf: 'unzip', pacman: 'unzip', zypper: 'unzip', apk: 'unzip', brew: 'unzip' });
+  if (!cmd || cmd === 'nosudo') return false;
+  return (await ctx.run(cmd, { allowFailure: true, timeoutMs: 300000 })).code === 0;
+}
+
+/** Returns the directory holding the fnm-installed node, or null when fnm could not be used at all. */
+async function installNodeViaFnm(ctx: Ctx): Promise<string | null> {
+  if (!(await ensureUnzip(ctx))) return null;
+  const fnm = join(ctx.host.home, '.local', 'share', 'fnm', 'fnm');
+  await ctx.run(['bash', '-c', 'curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell'], { timeoutMs: 600000, allowFailure: true });
+  if (!(await stat(fnm).then(() => true, () => false))) return null;
   await ctx.run([fnm, 'install', String(NODE_MAJOR)], { timeoutMs: 600000 });
   await ctx.run([fnm, 'default', String(NODE_MAJOR)], { timeoutMs: 600000 });
-  return `Node ${NODE_MAJOR} installed with fnm. Add to your shell rc: eval "$(${fnm} env --use-on-cd)"`;
+  return join(ctx.host.home, '.local', 'share', 'fnm', 'aliases', 'default', 'bin');
+}
+
+/**
+ * No-admin fallback: the official nodejs.org build, unpacked into `~/.local` (whose `bin` install.sh already puts
+ * on PATH). Needs only curl + tar + xz, which these images do have, and verifies the published SHA256 before
+ * unpacking. glibc only -- nodejs.org publishes no musl build, so an unprivileged musl host is reported, not guessed at.
+ */
+async function installNodeFromTarball(ctx: Ctx): Promise<string | null> {
+  const h = ctx.host;
+  if (h.platform !== 'linux' || h.isMusl) return null;
+  const arch = h.arch === 'arm64' ? 'arm64' : 'x64';
+  const prefix = join(h.home, '.local');
+  const script = [
+    'set -eu',
+    `base="https://nodejs.org/dist/latest-v${NODE_MAJOR}.x"`,
+    'tmp="$(mktemp -d)"; trap \'rm -rf "$tmp"\' EXIT',
+    'curl -fsSL "$base/SHASUMS256.txt" -o "$tmp/SHASUMS256.txt"',
+    `file="$(awk '/node-v.*-linux-${arch}[.]tar[.]xz$/{print $2; exit}' "$tmp/SHASUMS256.txt")"`,
+    `[ -n "$file" ] || { echo "no linux-${arch} tarball listed" >&2; exit 1; }`,
+    'curl -fsSL "$base/$file" -o "$tmp/$file"',
+    'grep -F " $file" "$tmp/SHASUMS256.txt" > "$tmp/want"',
+    '(cd "$tmp" && sha256sum -c want)',
+    `mkdir -p '${prefix}'`,
+    `tar -xJf "$tmp/$file" -C '${prefix}' --strip-components=1`,
+  ].join('\n');
+  const r = await ctx.run(['bash', '-c', script], { timeoutMs: 900000, allowFailure: true });
+  if (r.code !== 0) return null;
+  const bin = join(prefix, 'bin');
+  return (await stat(join(bin, 'node')).then(() => true, () => false)) ? bin : null;
 }
 
 async function toolLatest(c: Component, ctx: Ctx): Promise<string | null> {
@@ -133,6 +280,7 @@ export const toolProvider: Provider = {
         if (pm === 'apt' && p.apt) { const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...split(p.apt)]); if (cmd) { await ctx.run(cmd, { allowFailure: true }); return ok(`${c.name} removed`); } }
         else if (pm === 'brew' && p.brew) { await ctx.run(['brew', 'uninstall', ...split(p.brew)], { allowFailure: true }); return ok(`${c.name} removed`); }
         else if (pm === 'winget' && p.winget) { await ctx.run(['winget', 'uninstall', '--id', p.winget, '--silent'], { allowFailure: true }); return ok(`${c.name} removed`); }
+        else if (pm === 'scoop' && p.scoop) { await ctx.run(['scoop', 'uninstall', ...split(p.scoop)], { allowFailure: true }); return ok(`${c.name} removed`); }
         return ok(`${c.name}: no uninstall route for ${pm ?? 'this host'}; remove it manually`, false);
       })];
     }
@@ -146,24 +294,44 @@ export const toolProvider: Provider = {
     const op = installed ? 'update' : 'install';
     return [action(c.id, op, `${op} ${c.name}${latest ? ` (${latest})` : ''}`, async () => {
       if (spec.strategy === 'node') {
-        const note = await installNode(ctx);
+        const r = await installNode(ctx, c.name);
+        if (!r.ok) return fail(r.message);
         await post();
-        return ok(`Node installed${note ? `. ${note}` : ''}`);
+        return ok(`Node installed${r.note ? `. ${r.note}` : ''}`);
       }
       const p = spec.packages;
-      const cmd = pmInstall(ctx, p);
+      let cmd: string[] | null | 'nosudo' = null;
+      let needsAdmin = false;
+      if (h.platform === 'windows') {
+        if (useAdminRoute(ctx)) cmd = windowsElevatedRoute(ctx, p);
+        else { const w = await windowsUserRoute(ctx, p); if (w === 'needs-admin') needsAdmin = true; else cmd = w; }
+      } else {
+        cmd = pmInstall(ctx, p);
+      }
       if (cmd === 'nosudo') return fail(`${c.name}: needs root or sudo to use ${h.pkgManager}; install it manually or rerun as root`);
-      if (cmd) { await aptUpdateOnce(ctx, cmd); await ctx.run(cmd, { timeoutMs: 600000 }); }
+      if (cmd) {
+        await aptUpdateOnce(ctx, cmd);
+        // A distro repo can simply not carry the package (Rocky 9 has neither ripgrep nor gh). When the component
+        // declares a script route, use it rather than reporting a failure we could have worked around.
+        const fallback = p.script?.[h.platform];
+        const viaPm = await ctx.run(cmd, { timeoutMs: 600000, allowFailure: Boolean(fallback) });
+        if (viaPm.code !== 0 && fallback) {
+          ctx.log.warn(`${c.name}: ${h.pkgManager} could not install it (${(viaPm.stderr || viaPm.stdout).trim().split('\n')[0] ?? `exit ${viaPm.code}`}); falling back to the direct download`);
+          await ctx.run(['sh', '-c', fallback], { timeoutMs: 600000 });
+        }
+      }
       else if (p.npm) await npmGlobal(ctx, p.npm);
       else if (p.go) {
         await ctx.run(['go', 'install', p.go.includes('@') ? p.go : `${p.go}@latest`], { timeoutMs: 600000 });
         // `go install` drops the binary in GOPATH/bin, which is rarely on the user's PATH; the LSP plugins look it up on PATH
         const gopath = (await ctx.run(['go', 'env', 'GOPATH'], { readOnly: true, allowFailure: true })).stdout.trim() || join(h.home, 'go');
+        addToRunPath(ctx, join(gopath, 'bin')); // visible to the rest of this run; `persistToolPath` puts it in the user's rc
         await post();
-        return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}; add that directory to PATH so the LSP plugin can find it (e.g. export PATH="$HOME/go/bin:$PATH")`);
+        return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}`);
       }
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });
       else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
+      else if (needsAdmin) return fail(`needs admin: rerun with --elevate, or install ${c.name} yourself`);
       else return fail(`${c.name}: no install route for ${h.platform}/${h.pkgManager ?? 'no package manager'}`);
       await post();
       // a package manager can only offer what its repo has: re-probe rather than claim an update the distro could not deliver

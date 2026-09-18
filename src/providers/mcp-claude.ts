@@ -1,7 +1,7 @@
 import type { Action, Component, Ctx, Installed, McpSpec, Platform, Provider } from '../types.js';
 import { getClaudeState } from './claude-plugin.js';
 import { action, ok, fail, skipAction } from './types.js';
-import { substituteSpec, secretHints } from './mcp-shared.js';
+import { substituteSpec, secretHints, runMcpPostInstall } from './mcp-shared.js';
 export { secretHints };
 const sortKeys = (v: unknown): unknown => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sortKeys(x)])) : v);
 export function desiredClaudeMcp(spec: McpSpec, platform: Platform): Record<string, unknown> {
@@ -26,6 +26,8 @@ export const mcpClaudeProvider: Provider = {
     return [action(c.id, op, `${op} MCP ${spec.name} (Claude, user scope)`, async () => {
       for (const v of spec.secretEnv ?? []) if (!ctx.env[v] && !ctx.secrets.has(v)) ctx.log.warn(`${spec.name}: ${v} is not set; the server will not authenticate until you export it`);
       await remove(); await ctx.run(['claude', 'mcp', 'add-json', spec.name, JSON.stringify(desired), '-s', 'user'], { timeoutMs: 120000 });
+      const post = await runMcpPostInstall(spec, ctx);
+      if (post) return fail(post);
       return ok(`${spec.name} configured for Claude.${secretHints(c, ctx)}`);
     })];
   },

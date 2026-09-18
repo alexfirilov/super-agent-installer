@@ -8,3 +8,4 @@ release/
 .playwright-cli/
 .playwright/
 .claude/skills/
+testResults.xml

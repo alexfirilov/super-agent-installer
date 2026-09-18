@@ -27,3 +27,24 @@ describe('hookProvider', () => {
     expect(r.ok).toBe(false); expect(r.message).toContain('boom');
   });
 });
+
+describe('caveman setup asking for its helper', () => {
+  it('runs `caveman setup --install` itself instead of printing it (GCE QA: fresh Rocky 9 host)', async () => {
+    let attempts = 0;
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '1.3.4' } });
+    const realRun = ctx.run;
+    ctx.run = async (argv, opts) => {
+      if (argv.join(' ') === 'caveman setup --agent-native claude') {
+        attempts += 1;
+        if (attempts === 1) return { code: 1, stdout: '', stderr: 'caveman-mcp not found; run `caveman setup --install`', skipped: false };
+        return { code: 0, stdout: '', stderr: '', skipped: false };
+      }
+      return realRun(argv, opts);
+    };
+    const c: Component = { id: 'hook-caveman-claude', name: 'caveman hooks', kind: 'hook', agents: 'claude', platforms: ['linux', 'windows', 'darwin'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'hook', provider: 'caveman', agent: 'claude' } };
+    const r = await (await hookProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['caveman', 'setup', '--install']);
+    expect(attempts).toBe(2); // retried after installing the helper
+  });
+});

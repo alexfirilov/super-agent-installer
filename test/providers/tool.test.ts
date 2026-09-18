@@ -21,8 +21,8 @@ describe('toolProvider', () => {
     const r = await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq' } }), ctx, null, 'install'))[0]!.run(ctx);
     expect(r.ok).toBe(false); expect(r.message).toMatch(/sudo/);
   });
-  it('uses winget on windows and npm -g without sudo', async () => {
-    const win = makeTestCtx({ host: { platform: 'windows', pkgManager: 'winget' }, responses: { 'winget install --id jqlang.jq --silent --accept-source-agreements --accept-package-agreements': '' } });
+  it('uses winget on windows and npm -g without sudo (--elevate restores today\'s machine-scope winget path)', async () => {
+    const win = makeTestCtx({ elevate: true, host: { platform: 'windows', pkgManager: 'winget' }, responses: { 'winget install --id jqlang.jq --silent --accept-source-agreements --accept-package-agreements': '' } });
     await (await toolProvider.plan(tool('jq', { packages: { apt: 'jq', winget: 'jqlang.jq' } }), win, null, 'install'))[0]!.run(win);
     expect(win.calls[0]?.[0]).toBe('winget');
     const responses: Record<string, string> = { 'npm install -g @caveman-ai/cli@1.3.4': '', 'caveman --version': '' };
@@ -31,14 +31,126 @@ describe('toolProvider', () => {
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['npm', 'install', '-g', '@caveman-ai/cli@1.3.4']); expect(ctx.calls).toContainEqual(['caveman', '--version']);
   });
+  it('windows without --elevate installs via scoop when present, bootstrapping it first when absent', async () => {
+    const present = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': '1.0', 'scoop install jq': '' } });
+    const r1 = await (await toolProvider.plan(tool('jq', { packages: { scoop: 'jq', winget: 'jqlang.jq' } }), present, null, 'install'))[0]!.run(present);
+    expect(r1.ok).toBe(true);
+    expect(present.calls).toContainEqual(['scoop', '--version']);
+    expect(present.calls).toContainEqual(['scoop', 'install', 'jq']);
+    expect(present.calls.some((a) => a[0] === 'winget')).toBe(false);
+    const absent = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': { code: 1 }, 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex': '', 'scoop install jq': '' } });
+    const r2 = await (await toolProvider.plan(tool('jq', { packages: { scoop: 'jq', winget: 'jqlang.jq' } }), absent, null, 'install'))[0]!.run(absent);
+    expect(r2.ok).toBe(true);
+    const bootstrapIdx = absent.calls.findIndex((a) => a.join(' ') === 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex');
+    const installIdx = absent.calls.findIndex((a) => a.join(' ') === 'scoop install jq');
+    expect(bootstrapIdx).toBeGreaterThanOrEqual(0); expect(installIdx).toBeGreaterThan(bootstrapIdx);
+  });
+  it('windows without --elevate uses winget --scope user only for the allow-listed Git.Git package', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows' }, responses: { 'winget install --id Git.Git --scope user --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const c = tool('git', { packages: { winget: 'Git.Git' } });
+    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['winget', 'install', '--id', 'Git.Git', '--scope', 'user', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+  });
+  it('windows without --elevate fails a machine-only winget package with the --elevate message and never calls winget', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows' } });
+    const c = tool('go', { packages: { winget: 'GoLang.Go' } });
+    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(false);
+    expect(r.message).toBe('needs admin: rerun with --elevate, or install go yourself');
+    expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
+  });
+  it('never routes to a package manager that is not installed (Windows Server 2022 has no winget)', async () => {
+    // GCE QA: elevated host, winget absent, so pkgManager is null. Routing to winget anyway made every tool fail
+    // with `Executable not found in $PATH: "winget"`, and the missing git took every plugin down with it.
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: null } });
+    const r = await (await toolProvider.plan(tool('go', { packages: { scoop: 'go', winget: 'GoLang.Go' } }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/no install route/);
+  });
+  it('an already-elevated windows shell installs machine-scope instead of failing every scoop package', async () => {
+    // Opening an admin terminal is the ordinary way people run an installer on Windows. scoop's installer refuses
+    // elevated shells, so before this the whole tool group failed with "rerun with --elevate" while already admin.
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: 'winget' }, responses: { 'winget install --id GoLang.Go --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r = await (await toolProvider.plan(tool('go', { packages: { scoop: 'go', winget: 'GoLang.Go' } }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['winget', 'install', '--id', 'GoLang.Go', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+    expect(ctx.calls.some((a) => a[0] === 'scoop')).toBe(false); // never bootstrapped, never invoked: it would refuse
+    // and no UAC prompt is possible on this path -- the process already holds the token
+    expect(ctx.calls.some((a) => a.join(' ').includes('Start-Process'))).toBe(false);
+  });
+  it('an already-elevated windows shell installs node with winget, not fnm', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: 'winget' }, responses: { 'winget install --id OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.some((a) => a[0] === 'scoop' || a[0] === 'fnm')).toBe(false);
+  });
+  it('node strategy on windows uses scoop + fnm without --elevate, and winget with --elevate', async () => {
+    const user = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '' } });
+    const r1 = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+    expect(r1.ok).toBe(true);
+    expect(user.calls).toContainEqual(['scoop', 'install', 'fnm']);
+    expect(user.calls).toContainEqual(['fnm', 'install', '24']);
+    expect(user.calls).toContainEqual(['fnm', 'default', '24']);
+    expect(user.calls.some((a) => a[0] === 'winget')).toBe(false);
+    const elevated = makeTestCtx({ elevate: true, host: { platform: 'windows' }, responses: { 'winget install --id OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r2 = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), elevated, null, 'install'))[0]!.run(elevated);
+    expect(r2.ok).toBe(true);
+    expect(elevated.calls).toContainEqual(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+    expect(elevated.calls.some((a) => a[0] === 'scoop')).toBe(false);
+  });
+  // C3: fnm writes neither the registry PATH nor a dir any earlier toolDirs entry covers, so the run itself has to
+  // put the freshly installed node on PATH -- every `prerequisites: ['node']` component depends on it.
+  it('puts the fnm-installed node on PATH in-process and leaves no "open a new shell" note', async () => {
+    const savedPath = process.env.PATH;
+    try {
+      const nodeExe = 'C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation\\node.exe';
+      const user = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, env: { PATH: 'C:\\Windows\\system32' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '', 'fnm exec --using=default -- node -p process.execPath': `${nodeExe}\n` } });
+      const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+      expect(r.ok).toBe(true);
+      expect(r.message).not.toMatch(/open a new shell/i);
+      expect(user.env.PATH).toBe('C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation;C:\\Windows\\system32');
+      expect(process.env.PATH).toContain('C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation');
+    } finally { process.env.PATH = savedPath; }
+  });
+  it('keeps a shell hint only when the fnm node directory cannot be resolved', async () => {
+    const savedPath = process.env.PATH;
+    try {
+      const user = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '' } });
+      const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+      expect(r.ok).toBe(true);
+      expect(r.message).toMatch(/could not be resolved/);
+    } finally { process.env.PATH = savedPath; }
+  });
   it('node strategy picks NodeSource for root apt and fnm for users', async () => {
     const root = makeTestCtx({ host: { isRoot: true, hasSudo: false }, responses: { 'bash -c curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs': '' } });
     await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), root, null, 'install'))[0]!.run(root);
     expect(root.calls.some((a) => a.join(' ').includes('nodesource'))).toBe(true);
-    const user = makeTestCtx();
+    const user = makeTestCtx({ responses: { 'unzip -v': 'UnZip 6.00' } }); // fnm's installer refuses without unzip
+    // fnm's installer can exit 0 having installed nothing, so the provider verifies the binary landed: stub it here
+    const fnmDir = join(user.host.home, '.local', 'share', 'fnm'); mkdirSync(fnmDir, { recursive: true }); writeFileSync(join(fnmDir, 'fnm'), '');
     await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
     expect(user.calls.some((a) => a.join(' ').includes('fnm.vercel.app'))).toBe(true);
     expect(user.calls.some((a) => a.join(' ').match(/fnm install 24/))).toBe(true);
+  });
+  it('installs unzip first for fnm, and falls back to the nodejs.org tarball when unzip cannot be installed', async () => {
+    // Rocky 9 and Ubuntu 24.04 cloud images ship no unzip; fnm's installer then prints "Not installing fnm due to
+    // missing dependencies" and every npm-installed component died with "Executable not found in $PATH: npm".
+    const withSudo = makeTestCtx({ responses: { 'unzip -v': { code: 1 }, 'sudo apt-get install -y unzip': '' } });
+    await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), withSudo, null, 'install'))[0]!.run(withSudo);
+    const unzipIdx = withSudo.calls.findIndex((a) => a.join(' ') === 'sudo apt-get install -y unzip');
+    const fnmIdx = withSudo.calls.findIndex((a) => a.join(' ').includes('fnm.vercel.app'));
+    expect(unzipIdx).toBeGreaterThanOrEqual(0); expect(fnmIdx).toBeGreaterThan(unzipIdx);
+
+    const noSudo = makeTestCtx({ host: { hasSudo: false }, responses: { 'unzip -v': { code: 1 } } });
+    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), noSudo, null, 'install'))[0]!.run(noSudo);
+    expect(noSudo.calls.some((a) => a.join(' ').includes('fnm.vercel.app'))).toBe(false); // would have refused anyway
+    const tarball = noSudo.calls.find((a) => a.join(' ').includes('nodejs.org/dist/latest-v24.x'));
+    expect(tarball).toBeDefined();
+    expect(tarball!.join(' ')).toContain('sha256sum -c want'); // never unpack an unverified download
+    expect(r.ok).toBe(false); // this fake host has no real tarball to unpack, so it reports instead of claiming success
+    expect(r.message).toMatch(/nodejs\.org tarball fallback/);
   });
   it('plans node update when installed major is below 24', async () => {
     const ctx = makeTestCtx();
@@ -105,11 +217,18 @@ describe('toolProvider', () => {
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['go', 'install', 'golang.org/x/tools/gopls@latest']);
   });
-  it('go install tells the user where the binary went so the LSP plugin can find it (found by real-host apply: ~/go/bin is not on PATH)', async () => {
-    const ctx = makeTestCtx({ responses: { 'go env GOPATH': '/home/u/go' } });
-    const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });
-    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
-    expect(r.ok).toBe(true); expect(r.message).toMatch(/\/home\/u\/go\/bin/); expect(r.message).toMatch(/PATH/);
+  it('go install puts GOPATH/bin on PATH for the rest of the run instead of telling the user to do it', async () => {
+    // GCE QA: the old message asked the user to `export PATH="$HOME/go/bin:$PATH"` themselves, so gopls was installed
+    // but invisible to the LSP plugin in any later shell -- leftover work the one-shot criterion forbids.
+    const savedPath = process.env.PATH;
+    try {
+      const ctx = makeTestCtx({ responses: { 'go env GOPATH': '/home/u/go' } });
+      const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });
+      const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+      expect(r.ok).toBe(true); expect(r.message).toMatch(/\/home\/u\/go\/bin/);
+      expect(r.message).not.toMatch(/export PATH/);
+      expect((ctx.env.PATH ?? '').split(':')).toContain('/home/u/go/bin');
+    } finally { process.env.PATH = savedPath; }
   });
   it('go uninstall removes the binary from GOPATH/bin', async () => {
     const gopath = mkdtempSync(join(tmpdir(), 'sai-gopath-'));
