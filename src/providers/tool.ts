@@ -302,14 +302,25 @@ export const toolProvider: Provider = {
         cmd = pmInstall(ctx, p);
       }
       if (cmd === 'nosudo') return fail(`${c.name}: needs root or sudo to use ${h.pkgManager}; install it manually or rerun as root`);
-      if (cmd) { await aptUpdateOnce(ctx, cmd); await ctx.run(cmd, { timeoutMs: 600000 }); }
+      if (cmd) {
+        await aptUpdateOnce(ctx, cmd);
+        // A distro repo can simply not carry the package (Rocky 9 has neither ripgrep nor gh). When the component
+        // declares a script route, use it rather than reporting a failure we could have worked around.
+        const fallback = p.script?.[h.platform];
+        const viaPm = await ctx.run(cmd, { timeoutMs: 600000, allowFailure: Boolean(fallback) });
+        if (viaPm.code !== 0 && fallback) {
+          ctx.log.warn(`${c.name}: ${h.pkgManager} could not install it (${(viaPm.stderr || viaPm.stdout).trim().split('\n')[0] ?? `exit ${viaPm.code}`}); falling back to the direct download`);
+          await ctx.run(['sh', '-c', fallback], { timeoutMs: 600000 });
+        }
+      }
       else if (p.npm) await npmGlobal(ctx, p.npm);
       else if (p.go) {
         await ctx.run(['go', 'install', p.go.includes('@') ? p.go : `${p.go}@latest`], { timeoutMs: 600000 });
         // `go install` drops the binary in GOPATH/bin, which is rarely on the user's PATH; the LSP plugins look it up on PATH
         const gopath = (await ctx.run(['go', 'env', 'GOPATH'], { readOnly: true, allowFailure: true })).stdout.trim() || join(h.home, 'go');
+        addToRunPath(ctx, join(gopath, 'bin')); // visible to the rest of this run; `persistToolPath` puts it in the user's rc
         await post();
-        return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}; add that directory to PATH so the LSP plugin can find it (e.g. export PATH="$HOME/go/bin:$PATH")`);
+        return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}`);
       }
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });
       else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });

@@ -208,11 +208,18 @@ describe('toolProvider', () => {
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['go', 'install', 'golang.org/x/tools/gopls@latest']);
   });
-  it('go install tells the user where the binary went so the LSP plugin can find it (found by real-host apply: ~/go/bin is not on PATH)', async () => {
-    const ctx = makeTestCtx({ responses: { 'go env GOPATH': '/home/u/go' } });
-    const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });
-    const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
-    expect(r.ok).toBe(true); expect(r.message).toMatch(/\/home\/u\/go\/bin/); expect(r.message).toMatch(/PATH/);
+  it('go install puts GOPATH/bin on PATH for the rest of the run instead of telling the user to do it', async () => {
+    // GCE QA: the old message asked the user to `export PATH="$HOME/go/bin:$PATH"` themselves, so gopls was installed
+    // but invisible to the LSP plugin in any later shell -- leftover work the one-shot criterion forbids.
+    const savedPath = process.env.PATH;
+    try {
+      const ctx = makeTestCtx({ responses: { 'go env GOPATH': '/home/u/go' } });
+      const c = tool('gopls', { probe: ['gopls', 'version'], packages: { go: 'golang.org/x/tools/gopls' } });
+      const r = await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+      expect(r.ok).toBe(true); expect(r.message).toMatch(/\/home\/u\/go\/bin/);
+      expect(r.message).not.toMatch(/export PATH/);
+      expect((ctx.env.PATH ?? '').split(':')).toContain('/home/u/go/bin');
+    } finally { process.env.PATH = savedPath; }
   });
   it('go uninstall removes the binary from GOPATH/bin', async () => {
     const gopath = mkdtempSync(join(tmpdir(), 'sai-gopath-'));

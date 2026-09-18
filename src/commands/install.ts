@@ -7,6 +7,7 @@ import { renderPlan, renderSummary, promptSecrets, postInstallHints } from './su
 import { ensureAuth, isHeadless } from '../auth/agents.js';
 import { probeVersion } from '../detect/tools.js';
 import { persistSecrets } from '../secrets/persist.js';
+import { persistToolPath } from '../exec/persist-path.js';
 export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean; noPersistSecrets?: boolean }
 const NIX_SNIPPET = `NixOS detected. Use home-manager instead:\n  programs.claude-code.enable = true;\n  programs.codex.enable = true;\nSee https://home-manager-options.extranix.com/?query=claude-code`;
 /** Agents this run actually needs signed in: the agent-target excludes the other agent on at least one
@@ -55,6 +56,7 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.dryRun) { ctx.log.info('dry-run: nothing executed'); return 0; }
   if (!sel.components.some((c) => c.kind === 'agent')) await signInAndSecrets();
   const result = await executeGrouped(sel, ctx, 'install', { afterKind: (kind) => (kind === 'agent' ? signInAndSecrets() : undefined) });
+  await persistToolPath(ctx); // gopls lands in ~/go/bin and the node fallback in ~/.local/bin: the next shell must see both
   if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records, { persistSkipped: !!o.noPersistSecrets, signIn: { agents: signInAgents, attempted: !o.noLogin } }); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
   await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
   return result.failed ? 1 : result.blocked ? 2 : 0; // 2: nothing failed, but a component was skipped because its agent is not signed in (D1)
