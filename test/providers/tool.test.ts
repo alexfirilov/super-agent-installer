@@ -118,10 +118,30 @@ describe('toolProvider', () => {
     const root = makeTestCtx({ host: { isRoot: true, hasSudo: false }, responses: { 'bash -c curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs': '' } });
     await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), root, null, 'install'))[0]!.run(root);
     expect(root.calls.some((a) => a.join(' ').includes('nodesource'))).toBe(true);
-    const user = makeTestCtx();
+    const user = makeTestCtx({ responses: { 'unzip -v': 'UnZip 6.00' } }); // fnm's installer refuses without unzip
+    // fnm's installer can exit 0 having installed nothing, so the provider verifies the binary landed: stub it here
+    const fnmDir = join(user.host.home, '.local', 'share', 'fnm'); mkdirSync(fnmDir, { recursive: true }); writeFileSync(join(fnmDir, 'fnm'), '');
     await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
     expect(user.calls.some((a) => a.join(' ').includes('fnm.vercel.app'))).toBe(true);
     expect(user.calls.some((a) => a.join(' ').match(/fnm install 24/))).toBe(true);
+  });
+  it('installs unzip first for fnm, and falls back to the nodejs.org tarball when unzip cannot be installed', async () => {
+    // Rocky 9 and Ubuntu 24.04 cloud images ship no unzip; fnm's installer then prints "Not installing fnm due to
+    // missing dependencies" and every npm-installed component died with "Executable not found in $PATH: npm".
+    const withSudo = makeTestCtx({ responses: { 'unzip -v': { code: 1 }, 'sudo apt-get install -y unzip': '' } });
+    await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), withSudo, null, 'install'))[0]!.run(withSudo);
+    const unzipIdx = withSudo.calls.findIndex((a) => a.join(' ') === 'sudo apt-get install -y unzip');
+    const fnmIdx = withSudo.calls.findIndex((a) => a.join(' ').includes('fnm.vercel.app'));
+    expect(unzipIdx).toBeGreaterThanOrEqual(0); expect(fnmIdx).toBeGreaterThan(unzipIdx);
+
+    const noSudo = makeTestCtx({ host: { hasSudo: false }, responses: { 'unzip -v': { code: 1 } } });
+    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), noSudo, null, 'install'))[0]!.run(noSudo);
+    expect(noSudo.calls.some((a) => a.join(' ').includes('fnm.vercel.app'))).toBe(false); // would have refused anyway
+    const tarball = noSudo.calls.find((a) => a.join(' ').includes('nodejs.org/dist/latest-v24.x'));
+    expect(tarball).toBeDefined();
+    expect(tarball!.join(' ')).toContain('sha256sum -c want'); // never unpack an unverified download
+    expect(r.ok).toBe(false); // this fake host has no real tarball to unpack, so it reports instead of claiming success
+    expect(r.message).toMatch(/nodejs\.org tarball fallback/);
   });
   it('plans node update when installed major is below 24', async () => {
     const ctx = makeTestCtx();
