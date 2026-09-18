@@ -50,6 +50,32 @@ nothing could outlive the session. Total spend was under $1 of the $10 ceiling.
 5. **caveman asked the user to run a command we can run** (`b0d1cd4`). `caveman setup` fails on a
    fresh host with "caveman-mcp not found; run `caveman setup --install`". We run it and retry.
 
+## Windows Server 2022
+
+Two runs, both on the stock `windows-2022` image, which ships **no winget**.
+
+Elevated (the startup script runs as `NT AUTHORITY\SYSTEM`): both agents installed, but every tool
+failed with `Executable not found in $PATH: "winget"`, and git failing that way took every plugin
+with it (`Failed to clone marketplace repository: Command 'git' not found`). The cause was a
+regression introduced earlier the same day: the "already elevated, so use the admin we have"
+shortcut emitted a winget command whenever the component declared a winget id, bypassing the
+detected-package-manager switch. Host detection had it right -- `pkgManager` was `null`. Fixed in
+`3b92984`; the shortcut was never needed, since detection already prefers winget when it exists.
+
+Non-elevated (a limited-rights account driven by a scheduled task, after granting
+`SeBatchLogonRight`): both agents installed; every tool failed with
+`EPERM: operation not permitted, uv_spawn 'powershell'` while trying to bootstrap scoop. This was
+**not** attributed: a non-interactive batch-logon token is not a normal desktop session, and the
+failure mode differs from the elevated run's. It may well be an artifact of the test harness.
+Treat the non-elevated Windows path as covered by unit tests only, and confirm it on a real
+Windows 11 desktop.
+
+Harness notes for anyone repeating this: `Invoke-WebRequest` without
+`$ProgressPreference='SilentlyContinue'` turned an 86 MB download from 1 second into a hang of
+nearly half an hour; `Start-Process -Credential` does not work from session 0; updating
+`windows-startup-script-ps1` on an existing instance and resetting does not re-run the script,
+while setting it at creation always does.
+
 ## Known limitation
 
 Claude sign-in cannot be completed unattended on a host with no terminal. Authorising in a browser
