@@ -26,9 +26,13 @@ export async function detectAuth(ctx: Ctx, agent: 'claude' | 'codex'): Promise<A
   }
   const r = await ctx.run(['codex', 'login', 'status'], { readOnly: true, allowFailure: true });
   const text = `${r.stdout}\n${r.stderr}`;
+  // No machine-readable flag exists on `codex login status`, so the mode is matched out of CLI prose. A vendor
+  // wording change silently yields `null`, which downstream reads as "not signed in" -- log the raw line so that
+  // failure is diagnosable instead of mysterious.
   let mode: string | null = null;
   if (/chatgpt|subscription/i.test(text)) mode = 'chatgpt';
   else if (/api[ -]?key/i.test(text)) mode = 'apikey';
+  if (mode === null) ctx.log.debug(`codex login status: could not classify auth mode from ${JSON.stringify(firstLine(r.stdout) || firstLine(r.stderr))}`);
   return { agent, authenticated: r.code === 0, mode, detail: firstLine(r.stdout) || firstLine(r.stderr) };
 }
 

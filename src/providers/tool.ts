@@ -74,8 +74,20 @@ async function windowsUserRoute(ctx: Ctx, p: ToolSpec['packages']): Promise<stri
   return null;
 }
 
-/** Windows install route when `--elevate` was passed: today's machine-scope behaviour, keyed off the detected package manager. */
+/**
+ * True when the machine-scope route is the right one: `--elevate` was passed, or this shell is ALREADY elevated.
+ * D3 forbids *requesting* elevation without `--elevate`; it does not require us to refuse admin rights we were
+ * handed. Without this, a user who opened an admin terminal -- the ordinary way people run an installer on Windows
+ * -- got `jq`, `ripgrep`, `gh`, `go`, `uv`, `pwsh` and `node` all failing with "rerun with --elevate" while already
+ * being admin, because scoop's installer refuses elevated shells. No UAC prompt can appear on this path: the
+ * process already holds the token.
+ */
+function useAdminRoute(ctx: Ctx): boolean { return ctx.elevate || ctx.host.isElevated === true; }
+
+/** Windows install route when the machine-scope route applies (see `useAdminRoute`): keyed off the detected package manager. */
 function windowsElevatedRoute(ctx: Ctx, p: ToolSpec['packages']): string[] | null {
+  // scoop refuses to run in an elevated shell, so with admin in hand winget's machine scope is the route that works.
+  if (ctx.host.isElevated && p.winget) return ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'];
   switch (ctx.host.pkgManager) {
     case 'winget': return p.winget ? ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'] : null;
     case 'scoop': return p.scoop ? ['scoop', 'install', ...split(p.scoop)] : null;
@@ -134,7 +146,7 @@ function addToRunPath(ctx: Ctx, dir: string): void {
 async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
   const h = ctx.host;
   if (h.platform === 'windows') {
-    if (!ctx.elevate) {
+    if (!useAdminRoute(ctx)) {
       const s = await ensureScoop(ctx);
       if (s !== true) return { ok: false, message: `needs admin: rerun with --elevate, or install ${name} yourself (${s})` };
       await ctx.run(['scoop', 'install', 'fnm']);
@@ -231,7 +243,7 @@ export const toolProvider: Provider = {
       let cmd: string[] | null | 'nosudo' = null;
       let needsAdmin = false;
       if (h.platform === 'windows') {
-        if (ctx.elevate) cmd = windowsElevatedRoute(ctx, p);
+        if (useAdminRoute(ctx)) cmd = windowsElevatedRoute(ctx, p);
         else { const w = await windowsUserRoute(ctx, p); if (w === 'needs-admin') needsAdmin = true; else cmd = w; }
       } else {
         cmd = pmInstall(ctx, p);

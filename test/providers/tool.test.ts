@@ -60,6 +60,23 @@ describe('toolProvider', () => {
     expect(r.message).toBe('needs admin: rerun with --elevate, or install go yourself');
     expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
   });
+  it('an already-elevated windows shell installs machine-scope instead of failing every scoop package', async () => {
+    // Opening an admin terminal is the ordinary way people run an installer on Windows. scoop's installer refuses
+    // elevated shells, so before this the whole tool group failed with "rerun with --elevate" while already admin.
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: 'winget' }, responses: { 'winget install --id GoLang.Go --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r = await (await toolProvider.plan(tool('go', { packages: { scoop: 'go', winget: 'GoLang.Go' } }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['winget', 'install', '--id', 'GoLang.Go', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+    expect(ctx.calls.some((a) => a[0] === 'scoop')).toBe(false); // never bootstrapped, never invoked: it would refuse
+    // and no UAC prompt is possible on this path -- the process already holds the token
+    expect(ctx.calls.some((a) => a.join(' ').includes('Start-Process'))).toBe(false);
+  });
+  it('an already-elevated windows shell installs node with winget, not fnm', async () => {
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: 'winget' }, responses: { 'winget install --id OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements': '' } });
+    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls.some((a) => a[0] === 'scoop' || a[0] === 'fnm')).toBe(false);
+  });
   it('node strategy on windows uses scoop + fnm without --elevate, and winget with --elevate', async () => {
     const user = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '' } });
     const r1 = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
@@ -96,13 +113,6 @@ describe('toolProvider', () => {
       expect(r.ok).toBe(true);
       expect(r.message).toMatch(/could not be resolved/);
     } finally { process.env.PATH = savedPath; }
-  });
-  it('ensureScoop refuses an elevated shell without --elevate, so node install fails with the admin message', async () => {
-    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true } });
-    const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);
-    expect(r.ok).toBe(false);
-    expect(r.message).toMatch(/needs admin: rerun with --elevate/);
-    expect(ctx.calls.some((a) => a[0] === 'scoop' || a[0] === 'winget')).toBe(false);
   });
   it('node strategy picks NodeSource for root apt and fnm for users', async () => {
     const root = makeTestCtx({ host: { isRoot: true, hasSudo: false }, responses: { 'bash -c curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs': '' } });

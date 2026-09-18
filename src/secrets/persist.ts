@@ -48,6 +48,10 @@ async function persistWindows(ctx: Ctx, vars: Map<string, string>): Promise<Pers
  */
 async function writeSecretsFile(ctx: Ctx, block: string): Promise<string> {
   const secretsPath = join(ctx.paths.stateDir, 'secrets.env');
+  // `writeTextAtomic` copies an EXISTING file's mode onto the replacement, so a secrets.env left loose by a user
+  // edit or a restore would be recreated 0644 and stay world-readable until the chmod below. Tighten it first and
+  // that window never opens.
+  await chmod(secretsPath, 0o600).catch(() => {});
   await writeTextAtomic(secretsPath, setMarkerBlock(await readIfExists(secretsPath), block, 'hash'), { mode: 0o600 });
   await chmod(secretsPath, 0o600);
   const mode = (await stat(secretsPath)).mode & 0o777;
