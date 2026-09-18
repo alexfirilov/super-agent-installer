@@ -77,6 +77,10 @@ describe('ensureAuth', () => {
   });
 
   it('headless claude captures the setup-token into ctx.secrets and ctx.env without logging the token itself', async () => {
+    const realStdin = process.stdin.isTTY, realStdout = process.stdout.isTTY;
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true }); // the code gets pasted back on stdin
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    const restore = () => { Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true }); Object.defineProperty(process.stdout, 'isTTY', { value: realStdout, configurable: true }); };
     const token = 'sk-ant-oat01-abcdefghijklmnopqrstuvwxyz0123456789';
     const ctx = makeTestCtx({
       responses: {
@@ -94,6 +98,7 @@ describe('ensureAuth', () => {
     // the token itself must never be logged; only its length or a marker
     expect(ctx.log.lines.some((l) => l.includes(token))).toBe(false);
     expect(ctx.log.lines.some((l) => /captured setup-token/.test(l))).toBe(true);
+    restore();
   });
 
   it('headless codex uses --device-auth (interactive) then re-verifies with detectAuth', async () => {
@@ -140,8 +145,9 @@ describe('claude setup-token with no terminal of our own', () => {
   it('borrows a pty from script(1) so the sign-in URL reaches the user, and reads the token back', async () => {
     // GCE QA on Ubuntu 24.04: with stdout redirected, `claude setup-token` printed NOTHING and hung until the
     // 10-minute timeout -- a silent hang, worse than a clean failure. Under script(1) it prints the URL at once.
-    const realIsTTY = process.stdout.isTTY;
+    const realIsTTY = process.stdout.isTTY; const realStdin = process.stdin.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true }); // someone is there to paste the code
     try {
       const token = 'sk-ant-oat01-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       const session = '\u001b[94mhttps://claude.com/cai/oauth/authorize?code=true\u001b[0m\n' + token + '\n';
@@ -150,7 +156,7 @@ describe('claude setup-token with no terminal of our own', () => {
         responses: {
           'claude auth status': { code: 1 },
           'script --version': 'script from util-linux 2.39.3',
-          [`script -qec claude setup-token ${join(tmpdir(), `sai-setup-token-${process.pid}.log`)}`]: { code: 0, writesFile: session },
+          [`script -qec stty cols 400 rows 100 2>/dev/null; claude setup-token ${join(tmpdir(), `sai-setup-token-${process.pid}.log`)}`]: { code: 0, writesFile: session },
         },
       });
       const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
@@ -159,12 +165,30 @@ describe('claude setup-token with no terminal of our own', () => {
       expect(ctx.secrets.get('CLAUDE_CODE_OAUTH_TOKEN')).toBe(token); // ANSI stripped off the captured session
     } finally {
       Object.defineProperty(process.stdout, 'isTTY', { value: realIsTTY, configurable: true });
+      Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });
+    }
+  });
+
+  it('refuses immediately when no one can paste the code back, instead of hanging until the timeout', async () => {
+    // Confirmed on GCE: authorising in the browser yields a code that must be pasted into the CLI. With stdin at
+    // /dev/null nobody can, so starting the flow only burns the ten-minute timeout.
+    const realStdin = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    try {
+      const ctx = makeTestCtx({ host: { platform: 'linux' }, responses: { 'claude auth status': { code: 1 } } });
+      const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
+      expect(state!.authenticated).toBe(false);
+      expect(ctx.calls.some((a) => a.join(' ').includes('setup-token'))).toBe(false);
+      expect(state!.detail).toMatch(/CLAUDE_CODE_OAUTH_TOKEN/);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });
     }
   });
 
   it('uses plain capture when we already own a terminal', async () => {
-    const realIsTTY = process.stdout.isTTY;
+    const realIsTTY = process.stdout.isTTY; const realStdin = process.stdin.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     try {
       const token = 'sk-ant-oat01-ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210';
       const ctx = makeTestCtx({ host: { platform: 'linux' }, responses: { 'claude auth status': { code: 1 }, 'claude setup-token': token } });
@@ -173,6 +197,7 @@ describe('claude setup-token with no terminal of our own', () => {
       expect(state!.authenticated).toBe(true);
     } finally {
       Object.defineProperty(process.stdout, 'isTTY', { value: realIsTTY, configurable: true });
+      Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });
     }
   });
 });

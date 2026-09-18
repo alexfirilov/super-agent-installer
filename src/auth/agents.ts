@@ -52,7 +52,11 @@ function stripAnsi(text: string): string {
  * than a clean failure. When we have no tty of our own, borrow one from script(1) and tee the session to a file we
  * can read the token back out of, so the URL still reaches the user's screen.
  */
-async function runSetupToken(ctx: Ctx): Promise<string> {
+async function runSetupToken(ctx: Ctx): Promise<string | null> {
+  // `claude setup-token` is a PASTE-BACK flow, confirmed on a GCE host: it shows a URL, the browser hands the user a
+  // code, and the CLI waits for that code on stdin. With no stdin there is nobody to paste, so it can never finish --
+  // it would just hold the run until the ten-minute timeout. Say so immediately instead.
+  if (!process.stdin.isTTY) return null;
   const usePty = !process.stdout.isTTY && ctx.host.platform === 'linux'
     && (await ctx.run(['script', '--version'], { readOnly: true, allowFailure: true })).code === 0;
   if (!usePty) return (await ctx.run(['claude', 'setup-token'], { timeoutMs: 600000, allowFailure: true })).stdout;
@@ -60,7 +64,8 @@ async function runSetupToken(ctx: Ctx): Promise<string> {
   await writeFile(logPath, '', { mode: 0o600 }); // script(1) truncates but keeps the mode: the token must not be world-readable
   try {
     ctx.log.info('claude: starting sign-in - a URL will appear below; open it in a browser to finish');
-    await ctx.run(['script', '-qec', 'claude setup-token', logPath], { interactive: true, timeoutMs: 600000, allowFailure: true });
+    // a pty with no terminal behind it defaults to 80 columns, which wraps the OAuth URL across lines
+    await ctx.run(['script', '-qec', 'stty cols 400 rows 100 2>/dev/null; claude setup-token', logPath], { interactive: true, timeoutMs: 600000, allowFailure: true });
     return stripAnsi(await readFile(logPath, 'utf8').catch(() => ''));
   } finally {
     await rm(logPath, { force: true });
@@ -69,6 +74,9 @@ async function runSetupToken(ctx: Ctx): Promise<string> {
 
 async function signInClaudeHeadless(ctx: Ctx): Promise<AuthState> {
   const output = await runSetupToken(ctx);
+  if (output === null) {
+    return { agent: 'claude', authenticated: false, mode: null, detail: 'claude sign-in needs a terminal to paste the code back into: run the installer interactively, or set CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` on any machine) before running it' };
+  }
   const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
   let token: string | undefined;
   for (let i = lines.length - 1; i >= 0; i--) { const l = lines[i]; if (l && TOKEN_RE.test(l)) { token = l; break; } }

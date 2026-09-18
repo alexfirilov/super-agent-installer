@@ -1,0 +1,26 @@
+- generic [ref=f23e1]:
+  - generic [ref=f23e8]:
+    - generic [ref=f23e10]:
+      - heading "Claude Code would like to connect to your Claude chat account" [level=1] [ref=f23e16]
+      - generic [ref=f23e17]:
+        - generic [ref=f23e18]: "YOUR ACCOUNT WILL BE USED TO:"
+        - generic [ref=f23e19]:
+          - generic [ref=f23e20]:
+            - generic [aria-hidden] [ref=f23e21]: 
+            - generic [ref=f23e22]: Contribute to your Claude subscription usage
+          - generic [ref=f23e23]:
+            - generic [aria-hidden] [ref=f23e24]: 
+            - generic [ref=f23e25]: Your privacy settings apply to coding sessions
+      - generic [ref=f23e26]:
+        - status [ref=f23e27]
+        - button "Authorize" [disabled] [active]
+        - button "Decline" [ref=f23e32] [cursor=pointer]
+    - generic [ref=f23e36]:
+      - generic [ref=f23e37]: Logged in as alexfirilov@gmail.com
+      - link "Switch account" [ref=f23e38] [cursor=pointer]:
+        - /url: /logout?returnTo=%2Flogin%3Ffrom%3Dlogout%26selectAccount%3Dtrue%26returnTo%3D%252Foauth%252Fauthorize%253Fcode%253Dtrue%2526client_id%253D9d1c250a-e61b-44d9-88ed-5944d1962f5e%2526response_type%253Dcode%2526redirect_uri%253Dhttps%25253A%25252F%25252Fplatform.claude.com%25252Foauth%25252Fcode%25252Fcallback%2526scope%253Duser%25253Ainference%2526code_challenge%253DzYWaNmJrWJR7OxwI5g7oCU3X2Lz5GmX4lB1ntLmHCko%2526code_challenge_method%253DS256%2526state%253DPQiweI5t6Vd0tuLPXOQDUjxSLiNq9SjwE4NEApGn46Y
+  - generic:
+    - generic:
+      - generic:
+        - status
+        - region "Notifications"
