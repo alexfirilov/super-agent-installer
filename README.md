@@ -43,7 +43,7 @@ As soon as the agents themselves are installed (and before anything that needs t
 
 ## What it manages
 
-See `docs/research/CATALOG.md` for the full ranked catalog and `manifest.json` for the exact components. The installer prompts for API keys only when a selected component needs one, validates them against the provider's API (and reports GitHub PAT scopes) before continuing, then persists them to the OS user environment so every new shell and every agent can see them: on Windows via `[Environment]::SetEnvironmentVariable(name, value, 'User')`; on POSIX in a dedicated `0600` file (`${XDG_CONFIG_HOME:-~/.config}/super-agent-installer/secrets.env`) that `~/.profile` (and `~/.zshrc`, if present) source with a guarded line -- the key value itself is never written into either rc file. Pass `--no-persist-secrets` to keep a key in memory for this run only.
+See `docs/research/CATALOG.md` for the full ranked catalog and `manifest.json` for the exact components. The installer prompts for API keys only when a selected component needs one, validates them against the provider's API (and reports GitHub PAT scopes) before continuing, then persists them to the OS user environment so every new shell and every agent can see them: on Windows via `[Environment]::SetEnvironmentVariable(name, value, 'User')`; on POSIX in a dedicated `0600` file (`${XDG_CONFIG_HOME:-~/.config}/super-agent-installer/secrets.env`) that `~/.profile`, `~/.bashrc` and `~/.zshrc` source with a guarded line (the latter two when they exist; `~/.zshrc` is created when zsh is your login shell) -- the key value itself is never written into either rc file. Pass `--no-persist-secrets` to keep a key in memory for this run only.
 
 ## After install
 

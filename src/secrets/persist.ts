@@ -66,19 +66,25 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
     return { persisted: [], failed: names.map((name) => ({ name, reason })) };
   }
   const sourceLine = `[ -f "${secretsPath}" ] && . "${secretsPath}"`;
+  const write = async (path: string) => writeTextAtomic(path, setMarkerBlock(await readIfExists(path), sourceLine, 'hashSecrets'));
+  // ~/.profile alone is not enough: a Linux desktop terminal starts a non-login interactive bash, which reads
+  // ~/.bashrc and never ~/.profile, and zsh never reads ~/.profile at all -- on a fresh macOS account ~/.zshrc does
+  // not even exist yet, so create it there. install.sh:93 loops the same three files.
   const profilePath = join(ctx.host.home, '.profile');
   try {
-    await writeTextAtomic(profilePath, setMarkerBlock(await readIfExists(profilePath), sourceLine, 'hashSecrets'));
+    await write(profilePath);
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
     return { persisted: [], failed: names.map((name) => ({ name, reason })) };
   }
-  const zshrcPath = join(ctx.host.home, '.zshrc');
-  if (await fileExists(zshrcPath)) {
+  const zsh = /(^|\/)zsh$/.test(ctx.env.SHELL ?? '');
+  for (const rc of ['.bashrc', '.zshrc']) {
+    const path = join(ctx.host.home, rc);
+    if (!(await fileExists(path)) && !(rc === '.zshrc' && zsh)) continue;
     try {
-      await writeTextAtomic(zshrcPath, setMarkerBlock(await readIfExists(zshrcPath), sourceLine, 'hashSecrets'));
+      await write(path);
     } catch (e) {
-      ctx.log.warn(`could not update ~/.zshrc: ${e instanceof Error ? e.message : String(e)}`);
+      ctx.log.warn(`could not update ~/${rc}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   for (const name of names) ctx.log.info(`persisted ${name} to the user environment`);
@@ -88,8 +94,8 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
 /** Writes every entry of `vars` to the OS user environment: `[Environment]::SetEnvironmentVariable(name, value, 'User')`
  * via a per-variable PowerShell child on Windows (the value travels through the child's environment, never argv, so
  * it never appears in a command line, a log line or a process listing), or a 0600 `<stateDir>/secrets.env` file plus
- * a guarded source line in `~/.profile` (and `~/.zshrc` when it already exists) on POSIX -- the value itself never
- * enters either rc file. Never runs under `--dry-run`; logs variable names only, never values. */
+ * a guarded source line in `~/.profile`, `~/.bashrc` and `~/.zshrc` on POSIX (the latter two when they exist, plus
+ * `~/.zshrc` created when the login shell is zsh) -- the value itself never enters any rc file. Never runs under `--dry-run`; logs variable names only, never values. */
 export async function persistSecrets(ctx: Ctx, vars: Map<string, string>): Promise<PersistResult> {
   if (ctx.dryRun || !vars.size) return { persisted: [], failed: [] };
   return ctx.host.platform === 'windows' ? persistWindows(ctx, vars) : persistPosix(ctx, vars);

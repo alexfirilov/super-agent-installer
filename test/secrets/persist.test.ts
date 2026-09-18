@@ -111,6 +111,25 @@ describe('persistSecrets on POSIX', () => {
     expect(again.persisted).toEqual(['A_KEY']);
     expect(await readFile(profilePath, 'utf8')).toBe(text);
   });
+  // M4: a Linux desktop bash starts non-login interactive (reads ~/.bashrc, not ~/.profile); a fresh macOS account
+  // has no ~/.zshrc at all and zsh never reads ~/.profile. install.sh already loops all three files.
+  it('also updates ~/.bashrc when it exists', async () => {
+    const ctx = makeTestCtx();
+    const bashrcPath = join(ctx.host.home, '.bashrc');
+    await writeFile(bashrcPath, '# my bashrc\n', 'utf8');
+    await persistSecrets(ctx, new Map([['A_KEY', 'v']]));
+    const text = await readFile(bashrcPath, 'utf8');
+    expect(text).toContain('# my bashrc');
+    expect(text).toContain(join(ctx.paths.stateDir, 'secrets.env'));
+    expect(text).not.toContain('export A_KEY=');
+  });
+  it('creates ~/.zshrc when the login shell is zsh and it does not exist yet (fresh macOS account)', async () => {
+    const ctx = makeTestCtx({ env: { SHELL: '/bin/zsh' } });
+    await persistSecrets(ctx, new Map([['A_KEY', 'v']]));
+    const text = await readFile(join(ctx.host.home, '.zshrc'), 'utf8');
+    expect(text).toContain(join(ctx.paths.stateDir, 'secrets.env'));
+    expect(text).not.toContain('export A_KEY=');
+  });
   it('does not force any particular mode onto an already-existing ~/.profile (it holds no secret)', async () => {
     const ctx = makeTestCtx();
     const profilePath = join(ctx.host.home, '.profile');
