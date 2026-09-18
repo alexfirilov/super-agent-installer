@@ -74,6 +74,29 @@ describe('toolProvider', () => {
     expect(elevated.calls).toContainEqual(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
     expect(elevated.calls.some((a) => a[0] === 'scoop')).toBe(false);
   });
+  // C3: fnm writes neither the registry PATH nor a dir any earlier toolDirs entry covers, so the run itself has to
+  // put the freshly installed node on PATH -- every `prerequisites: ['node']` component depends on it.
+  it('puts the fnm-installed node on PATH in-process and leaves no "open a new shell" note', async () => {
+    const savedPath = process.env.PATH;
+    try {
+      const nodeExe = 'C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation\\node.exe';
+      const user = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, env: { PATH: 'C:\\Windows\\system32' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '', 'fnm exec --using=default -- node -p process.execPath': `${nodeExe}\n` } });
+      const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+      expect(r.ok).toBe(true);
+      expect(r.message).not.toMatch(/open a new shell/i);
+      expect(user.env.PATH).toBe('C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation;C:\\Windows\\system32');
+      expect(process.env.PATH).toContain('C:\\Users\\u\\AppData\\Roaming\\fnm\\node-versions\\v24.0.0\\installation');
+    } finally { process.env.PATH = savedPath; }
+  });
+  it('keeps a shell hint only when the fnm node directory cannot be resolved', async () => {
+    const savedPath = process.env.PATH;
+    try {
+      const user = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, responses: { 'scoop --version': '1.0', 'scoop install fnm': '', 'fnm install 24': '', 'fnm default 24': '' } });
+      const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), user, null, 'install'))[0]!.run(user);
+      expect(r.ok).toBe(true);
+      expect(r.message).toMatch(/could not be resolved/);
+    } finally { process.env.PATH = savedPath; }
+  });
   it('ensureScoop refuses an elevated shell without --elevate, so node install fails with the admin message', async () => {
     const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true } });
     const r = await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);

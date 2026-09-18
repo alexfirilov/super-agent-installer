@@ -13,9 +13,11 @@ export function toolDirs(host: HostInfo, env: Record<string, string | undefined>
     const appData = env.APPDATA ?? `${h}\\AppData\\Roaming`;
     const programFiles = env.ProgramFiles ?? 'C:\\Program Files';
     const scoop = env.SCOOP ?? `${h}\\scoop`;
+    const fnm = env.FNM_DIR ?? `${appData}\\fnm`;
     return [
       `${h}\\.local\\bin`,
       `${local}\\Programs\\OpenAI\\Codex\\bin`,
+      `${fnm}\\aliases\\default`, // fnm's persistent default alias; on Windows node.exe sits in it directly (POSIX has a bin/ subdir)
       `${programFiles}\\nodejs`,
       `${env.GOPATH ?? `${h}\\go`}\\bin`,
       `${appData}\\npm`,

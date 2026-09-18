@@ -7,6 +7,7 @@ import { isNewer, normalizeVersion } from '../version/compare.js';
 import { NODE_MAJOR } from '../pins.js';
 import { action, ok, fail } from './types.js';
 import { memo } from '../exec/memo.js';
+import { extendPathWith } from '../exec/path.js';
 
 function sudo(ctx: Ctx, argv: string[]): string[] | null {
   if (ctx.host.isRoot) return argv;
@@ -109,6 +110,27 @@ async function npmUninstall(ctx: Ctx, pkgs: string[]): Promise<void> {
 
 type NodeInstallResult = { ok: true; note: string | null } | { ok: false; message: string };
 
+/**
+ * Where fnm actually put node. `fnm default <major>` only moves an alias: it writes neither the registry PATH nor
+ * any directory `toolDirs` can know the version of, so without this every `prerequisites: ['node']` component in the
+ * same run would still fail to find `node`. Asking fnm itself beats guessing the layout.
+ * The dirname is cut by hand rather than with `path.dirname`, which is POSIX-only in this process and would return
+ * `.` for the `C:\...\node.exe` this returns on Windows.
+ */
+async function fnmNodeDir(ctx: Ctx): Promise<string | null> {
+  const r = await ctx.run(['fnm', 'exec', '--using=default', '--', 'node', '-p', 'process.execPath'], { readOnly: true, allowFailure: true });
+  if (r.code !== 0) return null;
+  const exe = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean).pop();
+  if (!exe) return null;
+  const cut = Math.max(exe.lastIndexOf('\\'), exe.lastIndexOf('/'));
+  return cut > 0 ? exe.slice(0, cut) : null;
+}
+/** Makes `dir` visible to every later command in this run (the child runner inherits process.env, providers read ctx.env). */
+function addToRunPath(ctx: Ctx, dir: string): void {
+  extendPathWith(ctx.host, process.env, [dir]);
+  if (ctx.env !== process.env) extendPathWith(ctx.host, ctx.env, [dir]);
+}
+
 async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
   const h = ctx.host;
   if (h.platform === 'windows') {
@@ -118,7 +140,10 @@ async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
       await ctx.run(['scoop', 'install', 'fnm']);
       await ctx.run(['fnm', 'install', String(NODE_MAJOR)], { timeoutMs: 600000 });
       await ctx.run(['fnm', 'default', String(NODE_MAJOR)], { timeoutMs: 600000 });
-      return { ok: true, note: `Node ${NODE_MAJOR} installed with fnm. Open a new shell (or run \`fnm env --use-on-cd | Invoke-Expression\`) so it's picked up.` };
+      const dir = await fnmNodeDir(ctx);
+      if (!dir) return { ok: true, note: `Node ${NODE_MAJOR} installed with fnm, but its directory could not be resolved from \`fnm exec --using=default -- node -p process.execPath\`; open a new shell (or run \`fnm env --use-on-cd | Invoke-Expression\`) so it's picked up.` };
+      addToRunPath(ctx, dir);
+      return { ok: true, note: null };
     }
     await ctx.run(['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
     return { ok: true, note: null };
