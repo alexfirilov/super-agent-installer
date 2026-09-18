@@ -35,8 +35,19 @@ describe('manifest.json', () => {
       expect((c.spec as { packages: { scoop?: string } }).packages.scoop, id).toBeTruthy();
     }
   });
-  it('no postInstallHint is a command we could run instead (npm/npx/curl belong in postInstall)', () => {
-    for (const c of m.components) if (c.postInstallHint) expect(c.postInstallHint, c.id).not.toMatch(/^(npm |npx |curl )/);
+  // D5: a hint whose first token is an executable is work we could have done. Allow-list shaped on purpose -- the old
+  // three-prefix denylist let `claude mcp login homeassistant` through.
+  it('no postInstallHint starts with a command we could run instead (it belongs in postInstall)', () => {
+    const EXECUTABLES = /^(npm|npx|node|curl|wget|sh|bash|pwsh|powershell|setx|export|claude|codex|scoop|winget|choco|brew|apt-get|gh|go|uv|uvx|pip|pipx|fnm|git)\b/;
+    for (const c of m.components) if (c.postInstallHint) expect(c.postInstallHint, c.id).not.toMatch(EXECUTABLES);
+  });
+  it('the Home Assistant MCP logins run as spec postInstall actions, not as hints', () => {
+    for (const id of ['mcp-ha-claude', 'mcp-ha-codex']) {
+      const c = m.components.find((x) => x.id === id)!;
+      expect(c.postInstallHint, id).toBeUndefined();
+      expect(c.spec.kind, id).toBe('mcp');
+      expect((c.spec as { postInstall?: string[][] }).postInstall, id).toEqual([[id.endsWith('codex') ? 'codex' : 'claude', 'mcp', 'login', 'homeassistant']]);
+    }
   });
   it('sk-agent-browser installs its CLI as postInstall, not a hint', () => {
     const c = m.components.find((x) => x.id === 'sk-agent-browser')!;

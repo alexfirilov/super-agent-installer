@@ -26,6 +26,19 @@ describe('mcpClaudeProvider', () => {
     const ctx = ctxWith({}, { 'claude mcp remove -s user gh': '', 'claude mcp add-json gh {"type":"http","url":"https://api.githubcopilot.com/mcp/","headers":{"Authorization":"Bearer ${GITHUB_PAT}"}} -s user': '' });
     const r = await (await mcpClaudeProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx); expect(r.ok).toBe(true); expect(r.message).toMatch(/export GITHUB_PAT=/);
   });
+  // Concern B: `claude mcp login <server>` is a command we can run, not advice. It lives on the spec, like SkillSpec's.
+  it('runs the spec postInstall interactively after a successful add, and fails the action when it exits non-zero', async () => {
+    const c = mcp({ name: 'homeassistant', url: 'https://ha/api/mcp', postInstall: [['claude', 'mcp', 'login', 'homeassistant']] });
+    const ctx = ctxWith({}, { 'claude mcp remove -s user homeassistant': '', 'claude mcp add-json homeassistant {"type":"http","url":"https://ha/api/mcp"} -s user': '', 'claude mcp login homeassistant': '' });
+    const r = await (await mcpClaudeProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['claude', 'mcp', 'login', 'homeassistant']);
+    expect(ctx.opts.find((o) => o.argv.join(' ') === 'claude mcp login homeassistant')?.opts.interactive).toBe(true);
+    const bad = ctxWith({}, { 'claude mcp remove -s user homeassistant': '', 'claude mcp add-json homeassistant {"type":"http","url":"https://ha/api/mcp"} -s user': '', 'claude mcp login homeassistant': { code: 1, stderr: 'login aborted' } as unknown as string });
+    const r2 = await (await mcpClaudeProvider.plan(c, bad, null, 'install'))[0]!.run(bad);
+    expect(r2.ok).toBe(false);
+    expect(r2.message).toMatch(/claude mcp login homeassistant/);
+  });
   it('uninstalls', async () => { const c = mcp({ name: 'exa', url: 'https://x' }); const ctx = ctxWith({ exa: {} }, { 'claude mcp remove -s user exa': '' }); await (await mcpClaudeProvider.plan(c, ctx, { version: null }, 'uninstall'))[0]!.run(ctx); expect(ctx.calls).toContainEqual(['claude', 'mcp', 'remove', '-s', 'user', 'exa']); });
   it('substitutes non-secret ${VAR} placeholders from ctx.env / ctx.secrets like Codex does, and leaves secret ones as references', async () => {
     const c = mcp({ name: 'ha', url: '${HA_URL}/api/mcp', bearerEnv: 'HA_TOKEN', secretEnv: ['HA_TOKEN'] });

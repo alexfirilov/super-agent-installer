@@ -33,3 +33,13 @@ export function secretHints(c: Component, ctx: Ctx): string {
   if (!missing.length) return ''; const w = ctx.host.platform === 'windows';
   return ` Set before use: ${missing.map((v) => (w ? `setx ${v} "<value>"` : `export ${v}=<value>`)).join('; ')}`;
 }
+
+/** Runs an `McpSpec.postInstall` command list with inherited stdio (these are browser OAuth logins: the user has to
+ * see and answer them). Returns an error message for the first command that fails, or null when all of them ran. */
+export async function runMcpPostInstall(spec: McpSpec, ctx: Ctx): Promise<string | null> {
+  for (const argv of spec.postInstall ?? []) {
+    const r = await ctx.run(argv, { interactive: true, allowFailure: true, timeoutMs: 600000 });
+    if (r.code !== 0) return `post-install command failed (exit ${r.code}): ${argv.join(' ')}`;
+  }
+  return null;
+}

@@ -19,6 +19,9 @@ export interface McpSpec {
   kind: 'mcp'; target: 'claude' | 'codex'; name: string; transport: 'http' | 'stdio';
   url?: string; bearerEnv?: string; command?: string; args?: string[]; env?: Record<string, string>;
   secretEnv?: string[]; extra?: Record<string, unknown>; oauth?: { clientId: string; callbackPort: number };
+  /** Commands to run after the server is configured, like `SkillSpec.postInstall` -- e.g. `claude mcp login <name>`
+   * for a server whose auth is a browser OAuth flow. Run with inherited stdio, so the user can complete it there. */
+  postInstall?: string[][];
 }
 export interface ToolPackages {
   apt?: string; dnf?: string; apk?: string; pacman?: string; zypper?: string; brew?: string; winget?: string; scoop?: string; choco?: string;
