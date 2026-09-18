@@ -84,13 +84,20 @@ async function windowsUserRoute(ctx: Ctx, p: ToolSpec['packages']): Promise<stri
  */
 function useAdminRoute(ctx: Ctx): boolean { return ctx.elevate || ctx.host.isElevated === true; }
 
-/** Windows install route when the machine-scope route applies (see `useAdminRoute`): keyed off the detected package manager. */
+/**
+ * Windows install route when the machine-scope route applies (see `useAdminRoute`): keyed off the package manager
+ * `detect/host.ts` actually found on PATH. Never route to a package manager that is not installed -- GCE QA on
+ * Windows Server 2022, which ships no winget, had every single tool fail with
+ * `Executable not found in $PATH: "winget"`, and losing git that way took every plugin down with it.
+ */
 function windowsElevatedRoute(ctx: Ctx, p: ToolSpec['packages']): string[] | null {
-  // scoop refuses to run in an elevated shell, so with admin in hand winget's machine scope is the route that works.
-  if (ctx.host.isElevated && p.winget) return ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'];
   switch (ctx.host.pkgManager) {
     case 'winget': return p.winget ? ['winget', 'install', '--id', p.winget, '--silent', '--accept-source-agreements', '--accept-package-agreements'] : null;
-    case 'scoop': return p.scoop ? ['scoop', 'install', ...split(p.scoop)] : null;
+    case 'scoop': {
+      if (!p.scoop) return null;
+      if (ctx.host.isElevated) { ctx.log.warn('scoop is the only package manager here and it refuses to run elevated; rerun in a normal (non-admin) terminal'); return null; }
+      return ['scoop', 'install', ...split(p.scoop)];
+    }
     case 'choco': return p.choco ? ['choco', 'install', '-y', ...split(p.choco)] : null;
     default: return null;
   }

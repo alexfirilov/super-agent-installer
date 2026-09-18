@@ -60,6 +60,15 @@ describe('toolProvider', () => {
     expect(r.message).toBe('needs admin: rerun with --elevate, or install go yourself');
     expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
   });
+  it('never routes to a package manager that is not installed (Windows Server 2022 has no winget)', async () => {
+    // GCE QA: elevated host, winget absent, so pkgManager is null. Routing to winget anyway made every tool fail
+    // with `Executable not found in $PATH: "winget"`, and the missing git took every plugin down with it.
+    const ctx = makeTestCtx({ host: { platform: 'windows', isElevated: true, pkgManager: null } });
+    const r = await (await toolProvider.plan(tool('go', { packages: { scoop: 'go', winget: 'GoLang.Go' } }), ctx, null, 'install'))[0]!.run(ctx);
+    expect(ctx.calls.some((a) => a[0] === 'winget')).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/no install route/);
+  });
   it('an already-elevated windows shell installs machine-scope instead of failing every scoop package', async () => {
     // Opening an admin terminal is the ordinary way people run an installer on Windows. scoop's installer refuses
     // elevated shells, so before this the whole tool group failed with "rerun with --elevate" while already admin.
