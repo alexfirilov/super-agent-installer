@@ -44,6 +44,19 @@ Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, -
   uninstall refuses them until they are reinstalled; use `--force` if you are sure.
 - `--elevate` (Windows only) allows a machine-scope winget install, which triggers one UAC prompt. Without it, installs stay per-user (scoop / `winget --scope user` / npm / a per-user script) and never prompt for admin.
 
+### caveman runs with the proxy off
+
+`caveman setup --agent-native claude` installs the hooks this installer wants **and** points Claude Code at
+caveman's gateway, by writing `env.ANTHROPIC_BASE_URL = <gateway>/w/claude` into `~/.claude/settings.json`.
+caveman offers no hooks-only mode. So the installer removes that route again after every setup, and heals it on
+any later run: you keep caveman mode, the statusline and the hooks, and Claude Code keeps talking straight to
+`api.anthropic.com`.
+
+Why the route is not wanted by default: if the proxy is not running, every request goes to a dead port and Claude
+Code cannot reach Anthropic at all; and Remote Control refuses any base URL that is not `api.anthropic.com`. A base
+URL you set yourself is never touched — only caveman's own `/w/claude` route is. `doctor` reports an
+`ANTHROPIC_BASE_URL` override, and exits 2 when it points at a local proxy with nothing listening.
+
 ## Sign-in
 
 As soon as the agents themselves are installed (and before anything that needs them), the installer signs each selected agent in for you: it detects an existing session (`claude auth status` / `codex login status`), and if neither is signed in it opens the vendor's own interactive login and waits for it to finish. On a headless host (no display, SSH, or an LXC container) it falls back to `claude setup-token` / `codex login --device-auth` instead of trying to open a browser. A component that needs an agent that never signed in (for example, a remote Codex plugin catalog that needs a ChatGPT login) is skipped with a one-line reason rather than failing later; those skips are listed as `BLOCKED` in the summary and make the run exit `2`. Pass `--no-login` to skip this phase and sign in yourself afterwards.

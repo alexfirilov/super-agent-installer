@@ -1,8 +1,36 @@
 import { readFile } from 'node:fs/promises';
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
-import { readJsonFile } from '../config/json.js';
+import { readJsonFile, writeJsonAtomic } from '../config/json.js';
 import { probeVersion } from '../detect/tools.js';
 import { action, ok, fail, skipAction } from './types.js';
+
+/** True for the base URL caveman's native setup writes: its local gateway, or any host with caveman's `/w/claude` app path. */
+export function isCavemanRoute(url: unknown): boolean {
+  return typeof url === 'string' && (/\/w\/claude\/?$/.test(url) || /^https?:\/\/(127\.0\.0\.1|localhost):8787(\/|$)/.test(url));
+}
+
+/**
+ * Caveman 2.7.0's `setup --agent-native claude` bundles gateway ROUTING with the hooks we actually want: it writes
+ * `env.ANTHROPIC_BASE_URL = <gateway>/w/claude` plus `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1` into
+ * ~/.claude/settings.json. With the proxy not running, every request goes to a dead port and Claude Code cannot
+ * talk to Anthropic at all (2026-09-19, this workstation); and remote control refuses a proxied base URL by design.
+ * The approved design is hooks + statusline with the proxy OFF, and caveman offers no hooks-only mode (`--no-proxy`
+ * is on its deleted-flags list), so we take the route back out after every setup and on every re-run.
+ * Only caveman's own route is touched: a base URL the user set themselves is left exactly as it was.
+ */
+export async function stripCavemanRoute(ctx: Ctx): Promise<boolean> {
+  const settings = (await readJsonFile<Record<string, unknown>>(ctx.paths.claudeSettings)) ?? null;
+  const env = settings?.env;
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
+  const e = env as Record<string, unknown>;
+  if (!isCavemanRoute(e.ANTHROPIC_BASE_URL)) return false;
+  delete e.ANTHROPIC_BASE_URL;
+  delete e._CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL; // only meaningful alongside the route; without it, it just pre-blesses the next one
+  if (!ctx.dryRun) await writeJsonAtomic(ctx.paths.claudeSettings, settings);
+  ctx.log.info('caveman: removed the gateway route from ~/.claude/settings.json (hooks kept, proxy off by design)');
+  return true;
+}
+
 export const hookProvider: Provider = {
   kind: 'hook',
   async detect(c, ctx) {
@@ -19,7 +47,13 @@ export const hookProvider: Provider = {
       if (r.code !== 0) return fail(`caveman setup --agent-native ${agent} --remove failed: ${(r.stderr || r.stdout).trim()}`);
       return ok('caveman hooks removed');
     })] : [];
-    if (installed && mode !== 'update') return [];
+    if (installed && mode !== 'update') {
+      // hooks are in place, but a re-run must still heal routing that caveman (or its own auto-update) wired since
+      if (agent === 'claude' && isCavemanRoute((((await readJsonFile<Record<string, unknown>>(ctx.paths.claudeSettings)) ?? {}).env as Record<string, unknown> | undefined)?.ANTHROPIC_BASE_URL)) {
+        return [action(c.id, 'configure', 'remove caveman gateway route from settings.json', async () => { await stripCavemanRoute(ctx); return ok('caveman proxy route removed from settings.json (hooks kept)'); })];
+      }
+      return [];
+    }
     return [action(c.id, installed ? 'update' : 'install', `caveman setup --agent-native ${agent}`, async () => {
       let r = await ctx.run(['caveman', 'setup', '--agent-native', agent], { allowFailure: true, timeoutMs: 300000 });
       // GCE QA on Rocky 9: a fresh host fails with "caveman-mcp not found; run `caveman setup --install`" -- a
@@ -30,7 +64,8 @@ export const hookProvider: Provider = {
         r = await ctx.run(['caveman', 'setup', '--agent-native', agent], { allowFailure: true, timeoutMs: 300000 });
       }
       if (r.code !== 0) return fail(`caveman setup failed: ${(r.stderr || r.stdout).trim()}`);
-      return ok(`caveman native hooks ${installed ? 'regenerated' : 'installed'} for ${agent}${agent === 'codex' ? '. Open Codex and run /hooks to trust them.' : ''}`);
+      const stripped = agent === 'claude' && (await stripCavemanRoute(ctx));
+      return ok(`caveman native hooks ${installed ? 'regenerated' : 'installed'} for ${agent}${stripped ? '; proxy route removed (hooks only, by design)' : ''}${agent === 'codex' ? '. Open Codex and run /hooks to trust them.' : ''}`);
     })];
   },
 };

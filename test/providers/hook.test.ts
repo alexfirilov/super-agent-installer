@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { hookProvider } from '../../src/providers/hook.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
@@ -46,5 +46,53 @@ describe('caveman setup asking for its helper', () => {
     expect(r.ok).toBe(true);
     expect(ctx.calls).toContainEqual(['caveman', 'setup', '--install']);
     expect(attempts).toBe(2); // retried after installing the helper
+  });
+});
+
+describe('caveman proxy routing is never left in settings.json (2026-09-19: ANTHROPIC_BASE_URL took Claude Code offline)', () => {
+  const wired = { env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:8787/w/claude', _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL: '1', ENABLE_TOOL_SEARCH: 'auto', MY_OWN: 'keep' }, hooks: { SessionStart: [{ hooks: [{ type: 'command', command: "'/h/.caveman/bin/caveman-proxy' native-hook claude --adapter x" }] }] } };
+
+  it('strips the gateway route caveman setup writes, keeps hooks and unrelated env', async () => {
+    // caveman 2.7.0's `setup --agent-native claude` bundles routing with the hooks: it writes
+    // env.ANTHROPIC_BASE_URL = <gateway>/w/claude plus the first-party flag. With the proxy not running every
+    // request went to a dead port and the user could not talk to Claude Code at all; remote control refuses a
+    // proxied base URL by design. The approved design is hooks + statusline, proxy OFF.
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '2.7.0' } });
+    mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    ctx.run = (async (argv, opts) => {
+      if (argv.join(' ') === 'caveman setup --agent-native claude') { writeFileSync(ctx.paths.claudeSettings, JSON.stringify(wired)); return { code: 0, stdout: '', stderr: '', skipped: false }; }
+      return { code: argv[0] === 'caveman' ? 0 : 127, stdout: argv[1] === '--version' ? '2.7.0' : '', stderr: '', skipped: false };
+    }) as typeof ctx.run;
+    const r = await (await hookProvider.plan(hook('claude'), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    const s = JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'));
+    expect(s.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(s.env._CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL).toBeUndefined();
+    expect(s.env.MY_OWN).toBe('keep');
+    expect(s.env.ENABLE_TOOL_SEARCH).toBe('auto'); // not routing: harmless, left alone
+    expect(s.hooks.SessionStart).toHaveLength(1);    // the hooks are the point; they stay
+    expect(r.message).toMatch(/proxy route removed/);
+  });
+
+  it('never touches a base URL the user set themselves', async () => {
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '2.7.0', 'caveman setup --agent-native claude': '' } });
+    mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://my-corp-gateway.example/v1', _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL: '1' } }));
+    await (await hookProvider.plan(hook('claude'), ctx, null, 'install'))[0]!.run(ctx);
+    const s = JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'));
+    expect(s.env.ANTHROPIC_BASE_URL).toBe('https://my-corp-gateway.example/v1');
+    expect(s.env._CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL).toBe('1');
+  });
+
+  it('heals an already-wired settings.json on a re-run even when hooks are already installed', async () => {
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '2.7.0' } });
+    mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    writeFileSync(ctx.paths.claudeSettings, JSON.stringify(wired));
+    const acts = await hookProvider.plan(hook('claude'), ctx, { version: null }, 'install');
+    expect(acts).toHaveLength(1); expect(acts[0]).toMatchObject({ op: 'configure' });
+    await acts[0]!.run(ctx);
+    const s = JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'));
+    expect(s.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(ctx.calls.some((a) => a.join(' ').includes('setup --agent-native'))).toBe(false); // no needless re-setup
   });
 });
