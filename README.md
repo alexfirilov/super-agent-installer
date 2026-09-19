@@ -29,12 +29,19 @@ Proxmox host (root, no sudo):
     super-agent-installer list       all components with verdicts and token costs
     super-agent-installer doctor     host diagnostics plus claude doctor / codex doctor
     super-agent-installer self-update   update the installer binary only
-    super-agent-installer uninstall [id...]
+    super-agent-installer uninstall <id...>   remove named components (only ones it installed)
+    super-agent-installer uninstall --all      remove every component it installed on this host
 
-Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate.
+Flags: --profile all|minimal|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate, --all, --force.
 
 - `--no-login` skips the sign-in phase entirely (see below); use it on a host with no browser, or when you already manage auth yourself.
 - `--no-persist-secrets` leaves pasted API keys in memory for this run only, instead of saving them to the user environment.
+- `uninstall` removes only what this installer actually installed. Software that was already on the host when it
+  first ran is recorded as not-ours and is refused, because removing a system package can take its reverse
+  dependencies with it -- on one host `apt-get remove bubblewrap` pulled out 150 packages including the desktop.
+  Name ids explicitly, or pass `--all`; a bare `uninstall --yes` will not wipe everything. `--force` overrides the
+  provenance refusal for ids you name yourself. Components installed before v0.2.1 carry no provenance, so
+  uninstall refuses them until they are reinstalled; use `--force` if you are sure.
 - `--elevate` (Windows only) allows a machine-scope winget install, which triggers one UAC prompt. Without it, installs stay per-user (scoop / `winget --scope user` / npm / a per-user script) and never prompt for admin.
 
 ## Sign-in

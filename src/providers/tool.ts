@@ -103,6 +103,23 @@ function windowsElevatedRoute(ctx: Ctx, p: ToolSpec['packages']): string[] | nul
   }
 }
 
+/**
+ * Packages apt would remove BEYOND the ones asked for. On 2026-09-19 `apt-get remove -y bubblewrap socat` on a real
+ * desktop pulled out 150 reverse-dependencies -- gdm3, gnome-shell, nautilus, google-chrome-stable -- leaving the
+ * host with no GUI. apt tells us in advance if we ask: `-s` simulates and prints one `Remv <pkg>` line per removal.
+ * A probe failure returns [] rather than blocking an ordinary uninstall.
+ */
+async function aptCollateral(ctx: Ctx, pkgs: string[]): Promise<string[]> {
+  const cmd = sudo(ctx, ['apt-get', '-s', 'remove', '-y', ...pkgs]);
+  if (!cmd) return [];
+  const r = await ctx.run(cmd, { readOnly: true, allowFailure: true });
+  if (r.code !== 0) return [];
+  const asked = new Set(pkgs);
+  return r.stdout.split('\n')
+    .map((l) => /^Remv\s+(\S+)/.exec(l.trim())?.[1])
+    .filter((n): n is string => Boolean(n) && !asked.has(n as string));
+}
+
 /** Writable if the path exists and is writable, or does not exist yet and its closest existing ancestor is writable (npm creates the missing dirs). */
 async function writableOrCreatable(p: string): Promise<boolean> {
   try { await stat(p); } catch (e) { const parent = dirname(p); return (e as NodeJS.ErrnoException).code === 'ENOENT' && parent !== p ? writableOrCreatable(parent) : false; }
@@ -277,7 +294,16 @@ export const toolProvider: Provider = {
             return ok(`${c.name} removed`);
           }
         }
-        if (pm === 'apt' && p.apt) { const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...split(p.apt)]); if (cmd) { await ctx.run(cmd, { allowFailure: true }); return ok(`${c.name} removed`); } }
+        if (pm === 'apt' && p.apt) {
+          const pkgs = split(p.apt);
+          const cmd = sudo(ctx, ['apt-get', 'remove', '-y', ...pkgs]);
+          if (cmd) {
+            const collateral = await aptCollateral(ctx, pkgs);
+            if (collateral.length) return fail(`${c.name}: apt would also remove ${collateral.length} package(s) that depend on it -- ${collateral.slice(0, 6).join(', ')}${collateral.length > 6 ? ', ...' : ''}. Refusing; remove it yourself if that is what you want.`);
+            await ctx.run(cmd, { allowFailure: true });
+            return ok(`${c.name} removed`);
+          }
+        }
         else if (pm === 'brew' && p.brew) { await ctx.run(['brew', 'uninstall', ...split(p.brew)], { allowFailure: true }); return ok(`${c.name} removed`); }
         else if (pm === 'winget' && p.winget) { await ctx.run(['winget', 'uninstall', '--id', p.winget, '--silent'], { allowFailure: true }); return ok(`${c.name} removed`); }
         else if (pm === 'scoop' && p.scoop) { await ctx.run(['scoop', 'uninstall', ...split(p.scoop)], { allowFailure: true }); return ok(`${c.name} removed`); }

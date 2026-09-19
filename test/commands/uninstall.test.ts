@@ -20,7 +20,12 @@ const fakeProvider = (behavior: Record<string, 'ok' | 'fail' | 'absent'>): Provi
   },
 });
 
-const initialState = (selectedIds: string[], installed: HostState['installed']): HostState => ({ version: 1, installerVersion: '0.1.0', profile: 'all', selectedIds, channel: 'latest', installed, lastRun: 't' });
+// Entries default to byUs:true -- these fixtures describe components the installer put there, which is what the
+// pre-provenance tests always meant. Tests about pre-existing host software pass byUs:false explicitly.
+const initialState = (selectedIds: string[], installed: HostState['installed']): HostState => ({
+  version: 1, installerVersion: '0.1.0', profile: 'all', selectedIds, channel: 'latest', lastRun: 't',
+  installed: Object.fromEntries(Object.entries(installed).map(([k, v]) => [k, { ...v, byUs: v.byUs ?? true }])),
+});
 
 describe('runUninstall', () => {
   it('removes an installed component from selectedIds and installed', async () => {
@@ -49,7 +54,7 @@ describe('runUninstall', () => {
     clearProviders(); registerProvider(fakeProvider({ a: 'ok', b: 'fail', c: 'ok' }));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
     await writeState(ctx.paths.stateFile, initialState(['a', 'b', 'c'], { a: { version: '1', at: 't' }, b: { version: '1', at: 't' }, c: { version: '1', at: 't' } }));
-    const code = await runUninstall(ctx, undefined, { installerVersion: '0.1.0' });
+    const code = await runUninstall(ctx, undefined, { installerVersion: '0.1.0', all: true });
     expect(code).toBe(1);
     const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8'));
     expect(state.selectedIds).toEqual(['b']);
@@ -68,5 +73,52 @@ describe('runUninstall', () => {
     expect(logs[0]).not.toMatch(/remove node/); expect(logs[0]).toMatch(/remove sk-x/);
     const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8'));
     expect(state.selectedIds).toEqual(['node']); expect(state.installed.node.version).toBe('1'); expect(state.installed['sk-x']).toBeUndefined();
+  });
+});
+
+describe('runUninstall provenance guard (2026-09-19 incident: uninstall removed pre-existing system packages)', () => {
+  it('never removes a component the installer did not install itself', async () => {
+    // A QA agent ran `uninstall --yes` on a real workstation. git, jq, ripgrep, gh and go were all present BEFORE
+    // the installer ever ran, so nothing of ours put them there -- yet uninstall targeted them, and apt's removal of
+    // bubblewrap took 150 further packages (gdm3, gnome-shell, Chrome) with it.
+    clearProviders(); registerProvider(fakeProvider({ a: 'ok', b: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    await writeState(ctx.paths.stateFile, initialState(['a', 'b'], {
+      a: { version: '1', at: 't', byUs: true },   // we installed it
+      b: { version: '1', at: 't', byUs: false },  // it was already on the host
+    }));
+    const code = await runUninstall(ctx, undefined, { installerVersion: '0.1.0', all: true });
+    expect(code).toBe(0);
+    const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8'));
+    expect(state.installed.a).toBeUndefined(); // ours: removed
+    expect(state.installed.b).toBeDefined();   // theirs: left alone
+  });
+
+  it('refuses an explicitly named component we did not install, and names --force', async () => {
+    clearProviders(); registerProvider(fakeProvider({ b: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    await writeState(ctx.paths.stateFile, initialState(['b'], { b: { version: '1', at: 't', byUs: false } }));
+    const code = await runUninstall(ctx, ['b'], { installerVersion: '0.1.0' });
+    expect(code).toBe(1);
+    expect(ctx.log.lines.some((l) => /--force/.test(l))).toBe(true);
+    expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).installed.b).toBeDefined();
+  });
+
+  it('--force removes a component we did not install, when the user names it', async () => {
+    clearProviders(); registerProvider(fakeProvider({ b: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    await writeState(ctx.paths.stateFile, initialState(['b'], { b: { version: '1', at: 't', byUs: false } }));
+    expect(await runUninstall(ctx, ['b'], { installerVersion: '0.1.0', force: true })).toBe(0);
+    expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).installed.b).toBeUndefined();
+  });
+
+  it('bare `uninstall --yes` refuses to wipe everything without --all', async () => {
+    clearProviders(); registerProvider(fakeProvider({ a: 'ok', b: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    await writeState(ctx.paths.stateFile, initialState(['a', 'b'], { a: { version: '1', at: 't', byUs: true } }));
+    const code = await runUninstall(ctx, undefined, { installerVersion: '0.1.0' });
+    expect(code).toBe(1);
+    expect(ctx.log.lines.some((l) => /--all/.test(l))).toBe(true);
+    expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).installed.a).toBeDefined();
   });
 });

@@ -7,8 +7,9 @@ export function buildState(prev: HostState | null, sel: Selection, records: Step
   for (const r of records) {
     if (!r.ok) continue;
     if (r.op === 'uninstall') delete installed[r.componentId];
-    else if (r.op === 'install' || r.op === 'update' || r.op === 'configure') installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now };
-    else if (r.op === 'skip' && !installed[r.componentId] && detections[r.componentId]) installed[r.componentId] = { version: detections[r.componentId]?.version ?? null, at: now };
+    // `changed` separates "we installed it" from "it was already correct": only the former is ours to remove later.
+    else if (r.op === 'install' || r.op === 'update' || r.op === 'configure') installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now, byUs: r.changed || (installed[r.componentId]?.byUs ?? false) };
+    else if (r.op === 'skip' && !installed[r.componentId] && detections[r.componentId]) installed[r.componentId] = { version: detections[r.componentId]?.version ?? null, at: now, byUs: false };
   }
   return { version: 1, installerVersion, profile: sel.profile, selectedIds: sel.components.map((c) => c.id), channel, installed, lastRun: now };
 }

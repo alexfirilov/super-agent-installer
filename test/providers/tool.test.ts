@@ -275,3 +275,27 @@ describe('toolProvider', () => {
     expect(ctx.calls).toContainEqual(['npm', 'uninstall', '-g', '--prefix', join(ctx.host.home, '.local'), '@caveman-ai/cli']);
   });
 });
+
+describe('apt collateral guard (2026-09-19 incident)', () => {
+  it('refuses an apt removal that would take unrelated packages with it', async () => {
+    // `apt-get remove -y bubblewrap socat` on a real desktop removed 150 further packages -- gdm3, gnome-shell,
+    // nautilus, google-chrome-stable -- because they depend on bubblewrap. Simulate first, and never proceed when
+    // apt says it would remove something we did not ask for.
+    const sim = 'Remv bubblewrap [0.11.1]\nRemv socat [1.8.0]\nRemv gdm3 [50.1]\nRemv gnome-shell [50.1]\n';
+    const ctx = makeTestCtx({ responses: { 'sudo apt-get -s remove -y bubblewrap socat': sim } });
+    const c = tool('bubblewrap', { probe: ['bwrap', '--version'], packages: { apt: 'bubblewrap socat' } });
+    const r = await (await toolProvider.plan(c, ctx, { version: '1' }, 'uninstall'))[0]!.run(ctx);
+    expect(ctx.calls.some((a) => a.join(' ') === 'sudo apt-get remove -y bubblewrap socat')).toBe(false);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/gdm3/);
+    expect(r.message).toMatch(/gnome-shell/);
+  });
+
+  it('proceeds when apt would remove only what was asked for', async () => {
+    const ctx = makeTestCtx({ responses: { 'sudo apt-get -s remove -y jq': 'Remv jq [1.8.1]\n', 'sudo apt-get remove -y jq': '' } });
+    const c = tool('jq', { probe: ['jq', '--version'], packages: { apt: 'jq' } });
+    const r = await (await toolProvider.plan(c, ctx, { version: '1' }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    expect(ctx.calls).toContainEqual(['sudo', 'apt-get', 'remove', '-y', 'jq']);
+  });
+});

@@ -82,7 +82,11 @@ export interface Ctx {
   auth?: Partial<Record<'claude' | 'codex', AuthState>>;
   secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
 }
-export interface Installed { version: string | null; details?: Record<string, unknown> }
+/** `byUs` records provenance: true only when this installer actually put the component there. A component merely
+ * DETECTED on the host (git that shipped with the distro) is recorded with byUs false, and uninstall must not touch
+ * it -- on 2026-09-19 a bare `uninstall --yes` removed the host's pre-existing git, jq, ripgrep, gh and go, and apt
+ * took 150 further packages with them. */
+export interface Installed { version: string | null; details?: Record<string, unknown>; byUs?: boolean }
 export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'configure';
 /** `blocked`: the component did nothing because an agent it needs never signed in. Reported separately from an
  * ordinary skip -- it stays in the summary table and makes the run exit non-zero (D1). */
@@ -92,4 +96,4 @@ export type Mode = 'install' | 'update' | 'uninstall';
 export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
 export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
 export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null }
-export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, { version: string | null; at: string }>; lastRun: string }
+export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, { version: string | null; at: string; byUs?: boolean }>; lastRun: string }
