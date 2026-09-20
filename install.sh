@@ -52,7 +52,6 @@ if ! need curl && ! need wget; then
   fi
   need curl || need wget || die "curl or wget is required"
 fi
-need tar || die "tar is required"
 
 fetch() {
   if need curl; then
@@ -106,6 +105,13 @@ say "installed to ${SAI_INSTALL_DIR}/super-agent-installer"
 rm -rf "$tmp"
 # `curl ... | bash` makes this script's stdin the pipe from curl, and exec inherits it -- so the installer saw no
 # terminal and refused to run interactively, meaning the README's headline one-liner could never show the picker.
-# Hand it the real terminal when there is one; in genuine CI there is no /dev/tty and the existing --yes path applies.
-[ -t 0 ] || { [ -e /dev/tty ] && exec < /dev/tty; } 2>/dev/null || true
+# Hand the BINARY the real terminal when there is one. Two traps, both hit for real:
+#  - `exec < /dev/tty` on its own line redirects the shell's stdin, and a shell fed by a pipe then reads the rest of
+#    THIS SCRIPT from the terminal: the binary never starts. The redirection must belong to the exec'd command.
+#  - /dev/tty exists as a device node inside containers but cannot be opened; a failed redirection on `exec` makes
+#    dash abort the script. Probe it in a subshell first, so CI and Docker fall through to the plain exec
+#    (where the existing --yes path applies).
+if [ ! -t 0 ] && ( : < /dev/tty ) 2>/dev/null; then
+  exec "$SAI_INSTALL_DIR/super-agent-installer" "$@" < /dev/tty
+fi
 exec "$SAI_INSTALL_DIR/super-agent-installer" "$@"

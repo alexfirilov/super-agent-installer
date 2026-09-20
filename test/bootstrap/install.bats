@@ -61,14 +61,31 @@ EOF
   [ "$(grep -n '^umask 077$' "$BATS_TEST_DIRNAME/../../install.sh" | cut -d: -f1)" -lt "$(grep -n 'mktemp' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)" ]
 }
 
-@test "reconnects stdin to the terminal before exec so a piped install can still prompt" {
+@test "piped stdin + a real terminal: the binary sees a tty (curl | bash with no --yes shows the picker)" {
   # The README's headline one-liner is `curl ... | bash`, which makes the script's stdin the pipe. `exec` inherits
   # it, so the CLI saw no tty and exited 3 with "Unable to run interactively" -- the advertised picker could never
-  # appear. Reconnect /dev/tty when stdin is not a terminal and one is available.
-  run grep -n 'dev/tty' "$BATS_TEST_DIRNAME/../../install.sh"
+  # appear. script(1) gives this test a controlling terminal, the pipe from cat plays curl's part.
+  command -v script >/dev/null || skip "script(1) not available"
+  printf '#!/bin/sh\nif [ -t 0 ]; then echo "stdin-is-a-tty"; else echo "stdin-is-not-a-tty"; fi\n' > "$TMP/release/super-agent-installer-linux-x64"
+  (cd "$TMP/release" && sha256sum super-agent-installer-linux-x64 > SHA256SUMS)
+  run script -qec "cat '$BATS_TEST_DIRNAME/../../install.sh' | bash" /dev/null
   [ "$status" -eq 0 ]
-  # and it must come before the exec, not after
-  tty_line=$(grep -n 'dev/tty' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)
-  exec_line=$(grep -n '^exec "' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)
-  [ "$tty_line" -lt "$exec_line" ]
+  [[ "$output" == *"stdin-is-a-tty"* ]]
+}
+@test "piped stdin + no controlling terminal (Docker, CI): still runs the binary under sh and under bash" {
+  # /dev/tty exists as a device node inside containers but cannot be opened. `exec < /dev/tty` failing on that made
+  # dash abort the whole script (exit 2) right after installing -- the binary never ran. setsid drops the terminal.
+  command -v setsid >/dev/null || skip "setsid not available"
+  run setsid -w sh -c "cat '$BATS_TEST_DIRNAME/../../install.sh' | sh -s -- --profile minimal --yes" < /dev/null
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fake binary args: --profile minimal --yes"* ]]
+  run setsid -w bash -c "cat '$BATS_TEST_DIRNAME/../../install.sh' | bash -s -- --yes" < /dev/null
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fake binary args: --yes"* ]]
+}
+@test "does not require tar (the binary bootstrap never unpacks anything)" {
+  printf '#!/bin/sh\nexit 127\n' > "$TMP/fakebin/tar"; chmod +x "$TMP/fakebin/tar"
+  run env PATH="$TMP/fakebin:/usr/bin:/bin" bash "$BATS_TEST_DIRNAME/../../install.sh" --no-run
+  [ "$status" -eq 0 ]
+  [ -x "$SAI_INSTALL_DIR/super-agent-installer" ]
 }
