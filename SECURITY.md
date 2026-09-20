@@ -30,8 +30,10 @@ itself first, then the components, so staying current is one command.
   named community marketplaces); Codex plugins from Codex's catalogs. Skills are installed with the `skills` CLI
   after a skills.sh audit; a `fail` verdict blocks the install unless `--no-audit` is passed.
 - **The installer itself.** `install.sh` / `install.ps1` download the release binary and `SHA256SUMS` over HTTPS
-  only and refuse a checksum mismatch. `self-update` does the same. Binaries are not code-signed or attested yet;
-  the checksum protects against corruption and a tampered mirror, not against a compromised GitHub account.
+  only and refuse a checksum mismatch. `self-update` does the same. Every release asset carries a GitHub build
+  provenance attestation (`actions/attest-build-provenance`, verifiable with `gh attestation verify`); the binaries
+  are not OS code-signed. The checksum protects against corruption and a tampered mirror, the attestation ties an
+  asset to the workflow run that built it.
 
 ## Secrets
 

@@ -51,4 +51,4 @@ that tested for `0` keep working; scripts that treated `1` as the only failure s
   until the user exports the variable by hand. Native credential stores are the better long-term answer.
 - Restoration is implemented for the two resources install actually replaces (MCP entries, status line). Settings
   keys are only ever added, never replaced, so nothing else needed it yet.
-- Binaries are checksummed, not signed.
+- Binaries are checksummed and carry GitHub build provenance attestations; they are not OS code-signed.
