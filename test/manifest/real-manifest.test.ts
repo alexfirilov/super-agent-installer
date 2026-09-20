@@ -53,7 +53,7 @@ describe('manifest.json', () => {
     const c = m.components.find((x) => x.id === 'sk-agent-browser')!;
     expect(c.postInstallHint).toBeUndefined();
     expect(c.spec.kind).toBe('skill');
-    expect((c.spec as { postInstall?: string[][] }).postInstall).toEqual([['npm', 'install', '-g', 'agent-browser'], ['agent-browser', 'install']]);
+    expect((c.spec as { postInstall?: string[][] }).postInstall).toEqual([['npm', 'install', '-g', 'agent-browser@0.38.1'], ['agent-browser', 'install']]);
   });
   it('every skill component has audit entries (also skills: "*" ones)', () => {
     for (const c of m.components) if (c.spec.kind === 'skill') { expect(c.audit?.length, c.id).toBeGreaterThan(0); for (const a of c.audit ?? []) expect(`${a.owner}/${a.repo}`, c.id).toBe(c.spec.repo.replace(/^https:\/\/github\.com\//, '')); }
@@ -95,6 +95,35 @@ describe('npx-based MCP servers', () => {
     for (const c of m.components) {
       if (c.spec.kind !== 'mcp' || c.spec.command !== 'npx') continue;
       expect(c.spec.args ?? [], `${c.id} runs npx without -y`).toContain('-y');
+    }
+  });
+});
+
+describe('pinned component versions (Finding 8)', () => {
+  // A given installer release installs a known set of versions. Anything the agents launch or we install through
+  // a package registry carries an explicit version; `update` moves to the pin, and a new release moves the pin.
+  const PIN = /@\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.]+)?$|==\d+\.\d+\.\d+$/;
+  it('every npm-installed tool and go tool names a version', () => {
+    for (const c of m.components) {
+      if (c.spec.kind !== 'tool') continue;
+      for (const pkg of (c.spec.packages.npm ?? '').split(/\s+/).filter(Boolean)) expect(pkg, `${c.id}: npm package ${pkg} is not pinned`).toMatch(PIN);
+      if (c.spec.packages.go) expect(c.spec.packages.go, `${c.id}: go package is not pinned`).toMatch(/@v\d+\.\d+\.\d+$/);
+    }
+  });
+  it('every npx/uvx-launched MCP server names a version (no @latest)', () => {
+    for (const c of m.components) {
+      if (c.spec.kind !== 'mcp' || !c.spec.command) continue;
+      if (!['npx', 'uvx'].includes(c.spec.command)) continue;
+      const pkg = (c.spec.args ?? []).find((a) => !a.startsWith('-'));
+      expect(pkg, `${c.id}: no package in args`).toBeDefined();
+      expect(pkg, `${c.id}: launch package ${pkg} is not pinned`).toMatch(PIN);
+      expect(pkg).not.toMatch(/@latest$/);
+    }
+  });
+  it('skill postInstall npm installs name a version', () => {
+    for (const c of m.components) {
+      if (c.spec.kind !== 'skill') continue;
+      for (const cmd of c.spec.postInstall ?? []) if (cmd[0] === 'npm' && cmd[1] === 'install') for (const pkg of cmd.slice(2).filter((a) => !a.startsWith('-'))) expect(pkg, `${c.id}: ${pkg} is not pinned`).toMatch(PIN);
     }
   });
 });

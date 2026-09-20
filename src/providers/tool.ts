@@ -260,9 +260,21 @@ async function installNodeFromTarball(ctx: Ctx): Promise<string | null> {
   return (await stat(join(bin, 'node')).then(() => true, () => false)) ? bin : null;
 }
 
+/**
+ * A version pinned in the manifest (`pkg@1.2.3` on the npm route, `module@v1.2.3` on the go route) IS the target
+ * version: no registry lookup, and `update` converges on the pin instead of floating to whatever the registry
+ * publishes that day. A new installer release moves the pin, so a given release installs a known set. `@latest`
+ * and other non-versions are not pins.
+ */
+export function pinnedVersion(spec: ToolSpec): string | null {
+  const first = spec.packages.npm ? split(spec.packages.npm)[0] : spec.packages.go;
+  const m = first ? /^.+?@([^@/]+)$/.exec(first) : null;
+  return m ? normalizeVersion(m[1]) : null;
+}
 async function toolLatest(c: Component, ctx: Ctx): Promise<string | null> {
   if (c.spec.kind !== 'tool') return null;
   const spec = c.spec;
+  const pinned = pinnedVersion(spec); if (pinned) return pinned;
   if (spec.latest?.npm) return memo(ctx, `npm:${spec.latest.npm}`, () => latestNpm(ctx.fetch, spec.latest!.npm!));
   if (spec.latest?.github) return memo(ctx, `github:${spec.latest.github}`, () => latestGithubRelease(ctx.fetch, spec.latest!.github!));
   return null;

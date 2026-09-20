@@ -312,3 +312,25 @@ describe('root-run downloads never use a predictable /tmp path', () => {
     expect(script).toMatch(/mktemp -d/);
   });
 });
+
+describe('pinned versions (Finding 8)', () => {
+  // A version pinned in the manifest is the target: no registry lookup, and `update` converges on the pin instead of
+  // floating to whatever npm publishes that day. A new installer release moves the pin.
+  const noNetwork = (async () => { throw new Error('network must not be used for a pinned package'); }) as unknown as typeof fetch;
+  it('reports the pin as latest without touching the network, for npm and go routes', async () => {
+    const ctx = makeTestCtx({ fetch: noNetwork });
+    expect(await toolProvider.latest!(tool('caveman-cli', { probe: ['caveman', '--version'], packages: { npm: '@caveman-ai/cli@1.3.4' }, latest: { npm: '@caveman-ai/cli' } }), ctx)).toBe('1.3.4');
+    expect(await toolProvider.latest!(tool('tsls', { packages: { npm: 'typescript-language-server@6.0.0 typescript@7.0.2' } }), ctx)).toBe('6.0.0');
+    expect(await toolProvider.latest!(tool('gopls', { packages: { go: 'golang.org/x/tools/gopls@v0.23.0' } }), ctx)).toBe('0.23.0');
+    expect(await toolProvider.latest!(tool('gopls', { packages: { go: 'golang.org/x/tools/gopls@latest' } }), ctx)).toBeNull(); // @latest is not a pin
+  });
+  it('update plans a move to the pin when behind it, and nothing when at or past it', async () => {
+    const c = tool('caveman-cli', { probe: ['caveman', '--version'], packages: { npm: '@caveman-ai/cli@1.3.4' }, latest: { npm: '@caveman-ai/cli' } });
+    const behind = makeTestCtx({ fetch: noNetwork, responses: { 'caveman --version': '1.3.3', 'npm install -g @caveman-ai/cli@1.3.4': '' } });
+    const acts = await toolProvider.plan(c, behind, { version: '1.3.3' }, 'update');
+    expect(acts).toHaveLength(1); expect(acts[0]).toMatchObject({ op: 'update', from: '1.3.3', to: '1.3.4' });
+    await acts[0]!.run(behind); expect(behind.calls).toContainEqual(['npm', 'install', '-g', '@caveman-ai/cli@1.3.4']);
+    expect(await toolProvider.plan(c, makeTestCtx({ fetch: noNetwork }), { version: '1.3.4' }, 'update')).toEqual([]);
+    expect(await toolProvider.plan(c, makeTestCtx({ fetch: noNetwork }), { version: '1.4.0' }, 'update')).toEqual([]); // never downgrades a user who moved ahead
+  });
+});
