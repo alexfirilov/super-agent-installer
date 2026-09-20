@@ -1,8 +1,19 @@
 import { readFile, writeFile, rename, mkdir, copyFile, stat, chmod, unlink } from 'node:fs/promises';
 import { dirname, basename, join } from 'node:path';
 
+/** A file that exists but does not parse. Callers must never treat this like a missing file: every config writer
+ * in this codebase does `(await readJsonFile(p)) ?? {}` and then writes the merge back, so a parse failure that
+ * read as null replaced the user's whole configuration with the installer's two-key patch. */
+export class JsonParseError extends Error {
+  constructor(public path: string, cause: string) { super(`${path} is not valid JSON (${cause}). It was left untouched: fix the file or restore a backup, then rerun.`); }
+}
+
+/** `null` only when the file does not exist. Invalid JSON throws `JsonParseError`; any other read error propagates. */
 export async function readJsonFile<T = Record<string, unknown>>(path: string): Promise<T | null> {
-  try { return JSON.parse(await readFile(path, 'utf8')) as T; } catch { return null; }
+  let text: string;
+  try { text = await readFile(path, 'utf8'); }
+  catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; }
+  try { return JSON.parse(text) as T; } catch (e) { throw new JsonParseError(path, (e as Error).message); }
 }
 
 export async function backupFile(path: string, backupsDir: string): Promise<string | null> {

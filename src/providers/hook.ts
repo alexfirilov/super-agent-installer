@@ -49,8 +49,13 @@ export const hookProvider: Provider = {
     })] : [];
     if (installed && mode !== 'update') {
       // hooks are in place, but a re-run must still heal routing that caveman (or its own auto-update) wired since
-      if (agent === 'claude' && isCavemanRoute((((await readJsonFile<Record<string, unknown>>(ctx.paths.claudeSettings)) ?? {}).env as Record<string, unknown> | undefined)?.ANTHROPIC_BASE_URL)) {
-        return [action(c.id, 'configure', 'remove caveman gateway route from settings.json', async () => { await stripCavemanRoute(ctx); return ok('caveman proxy route removed from settings.json (hooks kept)'); })];
+      if (agent === 'claude') {
+        let settings: Record<string, unknown>;
+        try { settings = (await readJsonFile<Record<string, unknown>>(ctx.paths.claudeSettings)) ?? {}; }
+        catch (e) { return [action(c.id, 'configure', 'read settings.json', async () => fail((e as Error).message))]; } // a malformed file fails this component, never the whole plan
+        if (isCavemanRoute((settings.env as Record<string, unknown> | undefined)?.ANTHROPIC_BASE_URL)) {
+          return [action(c.id, 'configure', 'remove caveman gateway route from settings.json', async () => { await stripCavemanRoute(ctx); return ok('caveman proxy route removed from settings.json (hooks kept)'); })];
+        }
       }
       return [];
     }

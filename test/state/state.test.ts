@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readState, writeState, buildState } from '../../src/state/state.js';
@@ -14,5 +14,9 @@ describe('state', () => {
     const s = buildState(prev, sel, recs, { z: { version: '2.1' } }, '0.1.0', 'latest');
     expect(s.installed.x?.version).toBe('1.0'); expect(s.installed.y).toBeUndefined(); expect(s.installed.z?.version).toBe('2'); expect(s.selectedIds).toEqual(['x', 'y', 'z']); expect(s.installerVersion).toBe('0.1.0');
     await writeState(p, s); expect(await readState(p)).toEqual(s);
+  });
+  it('refuses to run on a corrupt state file instead of silently starting over (provenance would be lost)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sai-')); const p = join(dir, 'state.json'); writeFileSync(p, '{"version":1,');
+    await expect(readState(p)).rejects.toThrow(/state\.json.*not valid JSON/s);
   });
 });

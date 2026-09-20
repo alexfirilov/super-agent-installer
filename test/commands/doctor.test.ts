@@ -22,6 +22,15 @@ describe('runDoctor and ANTHROPIC_BASE_URL', () => {
     } finally { c.restore(); }
   });
 
+  it('reports a settings.json that is not valid JSON instead of crashing, and exits 2', async () => {
+    const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    writeFileSync(ctx.paths.claudeSettings, '{ "env": { broken');
+    const c = capture();
+    try {
+      expect(await runDoctor(ctx)).toBe(2);
+      expect(c.out.join('\n')).toMatch(/settings\.json.*not valid JSON/);
+    } finally { c.restore(); }
+  });
   it('stays quiet when no base URL override is set', async () => {
     const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
     writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ env: {} }));

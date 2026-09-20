@@ -14,6 +14,12 @@ describe('statuslineProvider', () => {
     expect(await statuslineProvider.detect(sl('caveman'), ctx)).toEqual({ version: null }); expect(await statuslineProvider.plan(sl('caveman'), ctx, { version: null }, 'install')).toEqual([]);
     await (await statuslineProvider.plan(sl('caveman'), ctx, { version: null }, 'uninstall'))[0]!.run(ctx); expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({});
   });
+  it('leaves a malformed settings.json exactly as it was and fails the action', async () => {
+    const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    const original = '{ "statusLine": { "type": "command", "command": "mine" }, broken'; writeFileSync(ctx.paths.claudeSettings, original);
+    await expect((await statuslineProvider.plan(sl('caveman'), ctx, null, 'install'))[0]!.run(ctx)).rejects.toThrow(/not valid JSON/);
+    expect(readFileSync(ctx.paths.claudeSettings, 'utf8')).toBe(original);
+  });
   it('replaces a fragile glob statusLine and uses powershell on windows', async () => {
     const win = makeTestCtx({ host: { platform: 'windows' } }); mkdirSync(win.paths.claudeConfigDir, { recursive: true });
     writeFileSync(win.paths.claudeSettings, JSON.stringify({ statusLine: { type: 'command', command: 'bash "$(ls -td ...)src/hooks/caveman-statusline.sh"' } }));

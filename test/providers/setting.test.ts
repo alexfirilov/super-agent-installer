@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { settingProvider } from '../../src/providers/setting.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
@@ -14,6 +14,21 @@ describe('settingProvider', () => {
     expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({ model: 'opus', autoUpdatesChannel: 'latest' });
     expect(await settingProvider.detect(c, ctx)).toEqual({ version: null }); expect(await settingProvider.plan(c, ctx, { version: null }, 'update')).toEqual([]);
     await (await settingProvider.plan(c, ctx, { version: null }, 'uninstall'))[0]!.run(ctx); expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({ model: 'opus' });
+  });
+  it('refuses to touch a settings.json that is not valid JSON, and says which file and why', async () => {
+    // Finding 2: a parse failure read as "empty file", so the patch was written over the user's whole configuration.
+    const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    const original = '{\n  "some": "existing configuration",\n  invalid\n}'; writeFileSync(ctx.paths.claudeSettings, original);
+    const c = setting('set-channel', { claudeSettings: { autoUpdatesChannel: 'latest' } });
+    await expect(settingProvider.detect(c, ctx)).rejects.toThrow(/not valid JSON/);
+    // the action throws; `executePlan` turns that into a FAILED record carrying this message (see executor.test.ts)
+    const err = await (await settingProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error); expect((err as Error).message).toContain(ctx.paths.claudeSettings); expect((err as Error).message).toMatch(/not valid JSON/);
+    expect(readFileSync(ctx.paths.claudeSettings, 'utf8')).toBe(original); // byte-for-byte untouched
+    expect(readdirSync(ctx.paths.claudeConfigDir).filter((n) => n.startsWith('.settings.json.'))).toEqual([]); // no truncated replacement left behind
+    expect(existsSync(ctx.paths.backupsDir)).toBe(false); // no backup either: nothing was going to be written
+    await expect((await settingProvider.plan(c, ctx, { version: null }, 'uninstall'))[0]!.run(ctx)).rejects.toThrow(/not valid JSON/);
+    expect(readFileSync(ctx.paths.claudeSettings, 'utf8')).toBe(original);
   });
   it('enables codex features and writes a TOML marker block', async () => {
     const ctx = makeTestCtx({ responses: { ...base, 'codex features enable memories': '' } }); mkdirSync(ctx.paths.codexHome, { recursive: true }); writeFileSync(ctx.paths.codexConfig, 'model = "x"\n');

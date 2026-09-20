@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir, platform } from 'node:os';
 import { join } from 'node:path';
-import { readJsonFile, backupFile, writeJsonAtomic, mergeClaudeSettings } from '../../src/config/json.js';
+import { readJsonFile, backupFile, writeJsonAtomic, mergeClaudeSettings, JsonParseError } from '../../src/config/json.js';
 describe('json config', () => {
   it('backs up then writes atomically preserving mode', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sai-')); const f = join(dir, 'settings.json'); writeFileSync(f, '{"a":1}'); chmodSync(f, 0o600);
@@ -13,9 +13,16 @@ describe('json config', () => {
     if (platform() !== 'win32') expect(statSync(f).mode & 0o777).toBe(0o600);
     expect(readdirSync(dir).filter((n) => n.startsWith('.settings.json.'))).toHaveLength(0);
   });
-  it('returns null for missing or invalid json', async () => {
+  it('returns null only for a missing file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sai-')); expect(await readJsonFile(join(dir, 'x.json'))).toBeNull();
-    writeFileSync(join(dir, 'bad.json'), '{'); expect(await readJsonFile(join(dir, 'bad.json'))).toBeNull();
+  });
+  it('throws JsonParseError, naming the file, for invalid JSON instead of pretending the file is empty', async () => {
+    // A malformed ~/.claude/settings.json used to read as null, every writer did `?? {}` and wrote back only its own
+    // patch: the user's whole configuration was replaced by a two-key file. Missing and malformed must differ.
+    const dir = mkdtempSync(join(tmpdir(), 'sai-')); const bad = join(dir, 'bad.json'); writeFileSync(bad, '{ "some": "existing configuration",\n  invalid\n}');
+    await expect(readJsonFile(bad)).rejects.toThrow(JsonParseError);
+    await expect(readJsonFile(bad)).rejects.toThrow(bad);
+    await expect(readJsonFile(bad)).rejects.toThrow(/not valid JSON/);
   });
   it('backup of a missing file returns null', async () => { expect(await backupFile('/nonexistent/x.json', tmpdir())).toBeNull(); });
 });

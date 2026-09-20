@@ -1,7 +1,7 @@
 import { connect } from 'node:net';
 import type { Ctx } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
-import { readJsonFile } from '../config/json.js';
+import { readJsonFile, JsonParseError } from '../config/json.js';
 
 /** True if something accepts a TCP connection at host:port within `ms`. */
 function listening(host: string, port: number, ms = 1500): Promise<boolean> {
@@ -21,7 +21,9 @@ function listening(host: string, port: number, ms = 1500): Promise<boolean> {
  * Returns a report line, or null when there is nothing to say.
  */
 async function baseUrlReport(ctx: Ctx): Promise<{ line: string; broken: boolean } | null> {
-  const s = (await readJsonFile<{ env?: Record<string, unknown> }>(ctx.paths.claudeSettings)) ?? {};
+  let s: { env?: Record<string, unknown> };
+  try { s = (await readJsonFile<{ env?: Record<string, unknown> }>(ctx.paths.claudeSettings)) ?? {}; }
+  catch (e) { if (e instanceof JsonParseError) return { line: `${e.message} Every installer step that patches this file will refuse to run until it parses.`, broken: true }; throw e; }
   const url = s.env?.ANTHROPIC_BASE_URL;
   if (typeof url !== 'string' || !url) return null;
   let u: URL; try { u = new URL(url); } catch { return { line: `ANTHROPIC_BASE_URL: ${url} (not a valid URL)`, broken: true }; }

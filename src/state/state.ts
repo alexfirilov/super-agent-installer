@@ -1,6 +1,13 @@
 import type { Channel, HostState, Installed, Selection, StepRecord } from '../types.js';
-import { readJsonFile, writeJsonAtomic } from '../config/json.js';
-export async function readState(path: string): Promise<HostState | null> { const s = await readJsonFile<HostState>(path); return s && s.version === 1 ? s : null; }
+import { readJsonFile, writeJsonAtomic, JsonParseError } from '../config/json.js';
+/** A corrupt state file aborts the run rather than reading as "first run": starting over would drop every
+ * provenance record, and a later `install` would re-record the host's software as ours. */
+export async function readState(path: string): Promise<HostState | null> {
+  let s: HostState | null;
+  try { s = await readJsonFile<HostState>(path); }
+  catch (e) { if (e instanceof JsonParseError) throw new Error(`${e.message} Deleting it makes this a fresh host: uninstall will then refuse anything it cannot prove it installed.`); throw e; }
+  return s && s.version === 1 ? s : null;
+}
 export async function writeState(path: string, state: HostState): Promise<void> { await writeJsonAtomic(path, state, { mode: 0o600 }); }
 /**
  * `mergeSelected` is for runs that touch only part of the host (`--only`, an explicit id list). Replacing
