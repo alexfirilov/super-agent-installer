@@ -108,3 +108,19 @@ describe('claudePluginProvider', () => {
     const st = await getClaudeState(ctx); expect(st.plugins).toHaveLength(2); expect(st.plugins[0]!.enabled).toBe(true);
   });
 });
+
+describe('uninstalling a plugin the installer only disabled', () => {
+  it('re-enables it instead of removing it', async () => {
+    // cp-plugin-dev and cp-pr-review-toolkit ship with Claude Code; our job was to DISABLE them, so undoing that
+    // means enabling them again. `mode === 'uninstall'` overrode spec.action and deleted them outright.
+    const c = plugin('plugin-dev', { action: 'disable' });
+    const ctx = makeTestCtx({ responses: { 'claude --version': '2.1.276', 'claude plugin list --json': JSON.stringify([{ id: 'plugin-dev@claude-plugins-official', scope: 'user', enabled: false, projectPath: null }]), 'claude plugin enable plugin-dev@claude-plugins-official --scope user': '' } });
+    const installed = await claudePluginProvider.detect(c, ctx); // the planner passes detect()'s result, details and all
+    expect(installed).toMatchObject({ details: { enabled: false } });
+    const acts = await claudePluginProvider.plan(c, ctx, installed, 'uninstall');
+    expect(acts).toHaveLength(1);
+    await acts[0]!.run(ctx);
+    expect(ctx.calls.some((a) => a.join(' ').startsWith('claude plugin uninstall'))).toBe(false);
+    expect(ctx.calls.some((a) => a.join(' ').includes('plugin enable plugin-dev@claude-plugins-official'))).toBe(true);
+  });
+});

@@ -41,6 +41,14 @@ export const claudePluginProvider: Provider = {
       const foreign = st.plugins.filter((p) => p.id === id && !ownsRow(p)).map((p) => `${p.projectPath} (${p.scope}${p.enabled ? '' : ', disabled'})`);
       return ok(`${id} uninstalled (${scopes.join(', ')})${foreign.length ? `; still referenced by other projects, remove it from their .claude settings if wanted: ${foreign.join(', ')}` : ''}`);
     };
+    // Undoing a 'disable' means enabling again, not deleting: these plugins ship with Claude Code and we never
+    // installed them, so `uninstall` removing them takes away something that was there before we ran.
+    if (mode === 'uninstall' && act === 'disable') return installed && !enabled ? [action(c.id, 'configure', `re-enable ${id}`, async () => {
+      const r = await ctx.run(['claude', 'plugin', 'enable', id, '--scope', 'user'], { allowFailure: true });
+      if (r.code !== 0) return fail(`enable ${id} failed: ${(r.stderr || r.stdout).trim()}`);
+      for (const p of st.plugins) if (p.id === id && p.scope === 'user') p.enabled = true;
+      return ok(`${id} re-enabled`);
+    })] : [];
     if (act === 'uninstall' || mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `uninstall ${id}`, uninstallAll)] : [];
     if (act === 'disable') return installed && enabled ? [action(c.id, 'disable', `disable ${id} at user scope`, async () => {
       const r = await ctx.run(['claude', 'plugin', 'disable', id, '--scope', 'user'], { allowFailure: true });

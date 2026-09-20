@@ -299,3 +299,16 @@ describe('apt collateral guard (2026-09-19 incident)', () => {
     expect(ctx.calls).toContainEqual(['sudo', 'apt-get', 'remove', '-y', 'jq']);
   });
 });
+
+describe('root-run downloads never use a predictable /tmp path', () => {
+  it('NodeSource setup script goes to a private mktemp dir, not /tmp/nodesource_setup.sh', async () => {
+    // As root, `curl -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh` lets any local user pre-create
+    // or symlink that path: root then executes their script, or truncates whatever the symlink points at.
+    const ctx = makeTestCtx({ host: { isRoot: true, hasSudo: false, pkgManager: 'apt' } });
+    await (await toolProvider.plan(tool('node', { strategy: 'node', probe: ['node', '--version'] }), ctx, null, 'install'))[0]!.run(ctx);
+    const script = ctx.calls.find((a) => a.join(' ').includes('nodesource'))?.join(' ') ?? '';
+    expect(script).toContain('nodesource');
+    expect(script).not.toContain('/tmp/nodesource_setup.sh');
+    expect(script).toMatch(/mktemp -d/);
+  });
+});

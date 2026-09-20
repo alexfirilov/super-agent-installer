@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { persistToolPath } from '../../src/exec/persist-path.js';
 import { makeTestCtx } from '../helpers/ctx.js';
@@ -35,5 +37,20 @@ describe('persistToolPath', () => {
     mkdirSync(join(ctx.host.home, 'go', 'bin'), { recursive: true });
     expect(await persistToolPath(ctx)).toEqual([]);
     expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
+  });
+
+  it('escapes directories so a $ or space in $HOME cannot corrupt every future shell', async () => {
+    // The block is sourced by every login. `export PATH="<dir>:$PATH"` with an unquoted dir breaks the moment
+    // $HOME holds a space, and a `$` in the path would expand to something else entirely.
+    const spaced = mkdtempSync(join(tmpdir(), 'sai home $x ')); // a space AND a $, both legal in a home path
+    const ctx = makeTestCtx({ host: { home: spaced } });
+    mkdirSync(join(spaced, 'go', 'bin'), { recursive: true });
+    const written = await persistToolPath(ctx);
+    expect(written.length).toBeGreaterThan(0);
+    const line = readFileSync(join(spaced, '.profile'), 'utf8').split('\n').find((l) => l.includes('go/bin'))!;
+    expect(line).toBeDefined();
+    // the directory must survive as one word: quoted, and the shell must still expand $PATH
+    const shown = execFileSync('sh', ['-c', `${line}; printf %s "$PATH"`], { encoding: 'utf8' });
+    expect(shown.split(':')).toContain(join(spaced, 'go', 'bin'));
   });
 });

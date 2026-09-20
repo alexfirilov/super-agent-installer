@@ -5,6 +5,7 @@ import { buildPlan } from '../planner.js';
 import { executePlan } from '../executor.js';
 import { readState, writeState, buildState } from '../state/state.js';
 import { renderPlan, renderSummary } from './summary.js';
+import { removePersistedSecrets } from '../secrets/persist.js';
 /**
  * Uninstall removes only what this installer put on the host.
  *
@@ -48,6 +49,12 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   if (!o.json) console.log('\n' + renderSummary(result.records)); else console.log(JSON.stringify(result.records, null, 2));
   const removedIds = new Set(target.filter((id) => result.records.some((r) => r.componentId === id && r.ok)));
   const remaining = (state?.selectedIds ?? []).filter((id) => !removedIds.has(id));
+  // A full teardown must also take away what install left outside the component list: the secrets file and the rc
+  // blocks that source it. A partial uninstall leaves them, since the remaining components still need them.
+  if (o.all && !result.failed) {
+    const cleaned = await removePersistedSecrets(ctx);
+    for (const path of cleaned) ctx.log.info(`removed installer entries from ${path}`);
+  }
   const next = buildState(state, { ...sel, components: ctx.manifest.components.filter((c) => remaining.includes(c.id)) }, result.records, plan.detections, o.installerVersion, ctx.channel);
   for (const id of removedIds) delete next.installed[id];
   await writeState(ctx.paths.stateFile, next);

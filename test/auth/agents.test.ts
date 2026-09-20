@@ -1,8 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { detectAuth, ensureAuth, isHeadless } from '../../src/auth/agents.js';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeTestCtx } from '../helpers/ctx.js';
+
+
+/** Fakes script(1): answers the probe, and writes `session` to whatever log path the provider chose. */
+function fakeScript(ctx: ReturnType<typeof makeTestCtx>, session: string | null): void {
+  const real = ctx.run;
+  ctx.run = (async (argv, opts) => {
+    const key = argv.join(' ');
+    if (argv[0] === 'script') {
+      ctx.calls.push(argv); ctx.opts.push({ argv, opts: opts ?? {} }); // the recording lives in the real runner we are bypassing
+      if (key === 'script --version') return { code: session === null ? 127 : 0, stdout: 'script from util-linux', stderr: '', skipped: false };
+      writeFileSync(argv[argv.length - 1]!, session ?? '');
+      return { code: 0, stdout: '', stderr: '', skipped: false };
+    }
+    return real(argv, opts);
+  }) as typeof ctx.run;
+}
 
 describe('isHeadless', () => {
   it('is never headless on windows or macOS', () => {
@@ -85,16 +102,15 @@ describe('ensureAuth', () => {
     const ctx = makeTestCtx({
       responses: {
         'claude auth status': { code: 1, stderr: 'Not authenticated' },
-        'claude setup-token': { code: 0, stdout: `Open this URL to authorize:\nhttps://console.anthropic.com/oauth/authorize?x=1\n\n${token}\n` },
       },
     });
+    fakeScript(ctx, `Open this URL to authorize:\nhttps://console.anthropic.com/oauth/authorize?x=1\n\n${token}\n`);
     const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
     expect(state).toMatchObject({ agent: 'claude', authenticated: true, mode: 'token' });
     expect(ctx.secrets.get('CLAUDE_CODE_OAUTH_TOKEN')).toBe(token);
     expect(ctx.env.CLAUDE_CODE_OAUTH_TOKEN).toBe(token);
     expect(ctx.calls).not.toContainEqual(['claude', 'auth', 'login']);
-    const setupCall = ctx.opts.find((o) => o.argv.join(' ') === 'claude setup-token');
-    expect(setupCall?.opts.interactive).toBeFalsy();
+    expect(ctx.calls.some((a) => a[0] === 'script')).toBe(true);
     // the token itself must never be logged; only its length or a marker
     expect(ctx.log.lines.some((l) => l.includes(token))).toBe(false);
     expect(ctx.log.lines.some((l) => /captured setup-token/.test(l))).toBe(true);
@@ -156,9 +172,9 @@ describe('claude setup-token with no terminal of our own', () => {
         responses: {
           'claude auth status': { code: 1 },
           'script --version': 'script from util-linux 2.39.3',
-          [`script -qec stty cols 400 rows 100 2>/dev/null; claude setup-token ${join(tmpdir(), `sai-setup-token-${process.pid}.log`)}`]: { code: 0, writesFile: session },
         },
       });
+      fakeScript(ctx, session);
       const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
       expect(ctx.calls.some((a) => a[0] === 'script')).toBe(true);
       expect(state!.authenticated).toBe(true);
@@ -185,16 +201,68 @@ describe('claude setup-token with no terminal of our own', () => {
     }
   });
 
-  it('uses plain capture when we already own a terminal', async () => {
+  it('always borrows a pty when one is available, because a captured child never gets a tty either', async () => {
+    // run.ts spawns every non-interactive child with ['pipe','pipe','pipe'], so plain capture hands `claude
+    // setup-token` a pipe exactly like a redirected stdout does -- and it prints nothing and waits. Gating the pty
+    // on OUR stdout being a tty therefore reintroduced the very hang it was meant to fix, on the other branch.
+    const realStdout = process.stdout.isTTY, realStdin = process.stdin.isTTY;
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    try {
+      const token = 'sk-ant-oat01-TTYBRANCHABCDEFGHIJKLMNOP0123456789';
+      const ctx = makeTestCtx({
+        host: { platform: 'linux' },
+        responses: {
+          'claude auth status': { code: 1 },
+          'script --version': 'script from util-linux 2.39.3',
+          [`script -qec stty cols 400 rows 100 2>/dev/null; claude setup-token ${join(tmpdir(), `sai-setup-token-${process.pid}.log`)}`]: { code: 0, writesFile: token + '\n' },
+        },
+      });
+      fakeScript(ctx, token + '\n');
+      const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
+      expect(ctx.calls.some((a) => a[0] === 'script')).toBe(true);
+      expect(ctx.calls.some((a) => a.join(' ') === 'claude setup-token')).toBe(false); // never the blind path
+      expect(state!.authenticated).toBe(true);
+    } finally {
+      Object.defineProperty(process.stdout, 'isTTY', { value: realStdout, configurable: true });
+      Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });
+    }
+  });
+
+  it('keeps the captured token out of a world-readable temp file', async () => {
+    // writeFile(path,'',{mode:0o600}) does NOT change the mode of a file that already exists, so a pre-created
+    // 0666 /tmp/sai-setup-token-<pid>.log would have received the OAuth token at 0666. Verified: mode stays 666.
+    const realStdout = process.stdout.isTTY, realStdin = process.stdin.isTTY;
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    try {
+      const ctx = makeTestCtx({ host: { platform: 'linux' }, responses: { 'claude auth status': { code: 1 } } });
+      fakeScript(ctx, 'no token here\n');
+      await ensureAuth(ctx, ['claude'], { headless: true });
+      const scriptCall = ctx.calls.find((a) => a[0] === 'script' && a[1] === '-qec');
+      expect(scriptCall).toBeDefined();
+      const logPath = scriptCall![scriptCall!.length - 1]!;
+      expect(logPath).not.toMatch(new RegExp(`^${tmpdir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/sai-setup-token-`)); // not a predictable path
+      expect(logPath.startsWith(tmpdir())).toBe(true);
+      expect(logPath).toMatch(/sai-auth-[^/]+\/setup-token\.log$/); // inside a 0700 mkdtemp dir
+    } finally {
+      Object.defineProperty(process.stdout, 'isTTY', { value: realStdout, configurable: true });
+      Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });
+    }
+  });
+
+  it('with no script(1), hands the terminal to the CLI and re-probes instead of parsing a token', async () => {
     const realIsTTY = process.stdout.isTTY; const realStdin = process.stdin.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     try {
-      const token = 'sk-ant-oat01-ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210';
-      const ctx = makeTestCtx({ host: { platform: 'linux' }, responses: { 'claude auth status': { code: 1 }, 'claude setup-token': token } });
+      const ctx = makeTestCtx({ host: { platform: 'linux' }, responses: { 'claude auth status': { code: 1 }, 'claude setup-token': '' } });
+      fakeScript(ctx, null); // script(1) absent
       const [state] = await ensureAuth(ctx, ['claude'], { headless: true });
-      expect(ctx.calls.some((a) => a[0] === 'script')).toBe(false);
-      expect(state!.authenticated).toBe(true);
+      expect(ctx.calls.some((a) => a[0] === 'script' && a[1] === '-qec')).toBe(false);
+      const setup = ctx.opts.find((o) => o.argv.join(' ') === 'claude setup-token');
+      expect(setup?.opts.interactive).toBe(true); // the user needs the terminal to paste the code
+      expect(state!.authenticated).toBe(false); // re-probe still says signed out; we never invent success
     } finally {
       Object.defineProperty(process.stdout, 'isTTY', { value: realIsTTY, configurable: true });
       Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });

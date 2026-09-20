@@ -26,7 +26,8 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ("sai-" + [Guid]::NewGuid().ToString
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
 function Get-Asset([string]$name, [string]$dest) {
-  if ($base -match '^https?://') { Invoke-WebRequest -UseBasicParsing -Uri "$base/$name" -OutFile $dest }
+  if ($base -match '^http://') { throw "SAI_BASE_URL must be https:// (got $base): the binary and its checksum would travel in plaintext" }
+  if ($base -match '^https://') { Invoke-WebRequest -UseBasicParsing -Uri "$base/$name" -OutFile $dest }
   else { Copy-Item -Path (Join-Path $base $name) -Destination $dest }
 }
 

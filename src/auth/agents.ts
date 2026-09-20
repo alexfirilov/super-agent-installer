@@ -1,4 +1,4 @@
-import { readFile, writeFile, rm } from 'node:fs/promises';
+import { readFile, rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AuthState, Ctx } from '../types.js';
@@ -57,18 +57,30 @@ async function runSetupToken(ctx: Ctx): Promise<string | null> {
   // code, and the CLI waits for that code on stdin. With no stdin there is nobody to paste, so it can never finish --
   // it would just hold the run until the ten-minute timeout. Say so immediately instead.
   if (!process.stdin.isTTY) return null;
-  const usePty = !process.stdout.isTTY && ctx.host.platform === 'linux'
+  // ALWAYS take the pty when one is available, never only when our own stdout is redirected: `run.ts` spawns every
+  // non-interactive child with ['pipe','pipe','pipe'], so the plain-capture path hands the CLI a pipe just like a
+  // redirected stdout does, and it prints nothing and waits. script(1) is what gives the child a real terminal AND
+  // lets us read the token back.
+  const usePty = ctx.host.platform !== 'windows'
     && (await ctx.run(['script', '--version'], { readOnly: true, allowFailure: true })).code === 0;
-  if (!usePty) return (await ctx.run(['claude', 'setup-token'], { timeoutMs: 600000, allowFailure: true })).stdout;
-  const logPath = join(tmpdir(), `sai-setup-token-${process.pid}.log`);
-  await writeFile(logPath, '', { mode: 0o600 }); // script(1) truncates but keeps the mode: the token must not be world-readable
+  if (!usePty) {
+    // No script(1): let the CLI own the terminal so the user can still complete the flow, and re-probe afterwards
+    // rather than parsing a token we cannot capture.
+    ctx.log.info('claude: starting sign-in in this terminal');
+    await ctx.run(['claude', 'setup-token'], { interactive: true, timeoutMs: 600000, allowFailure: true });
+    return '';
+  }
+  // A predictable path is a hazard: `writeFile(path,'',{mode})` does NOT re-mode an existing file, so a pre-created
+  // 0666 file would have been handed the OAuth token at 0666. mkdtemp creates a fresh 0700 directory we own.
+  const dir = await mkdtemp(join(tmpdir(), 'sai-auth-'));
+  const logPath = join(dir, 'setup-token.log');
   try {
     ctx.log.info('claude: starting sign-in - a URL will appear below; open it in a browser to finish');
     // a pty with no terminal behind it defaults to 80 columns, which wraps the OAuth URL across lines
     await ctx.run(['script', '-qec', 'stty cols 400 rows 100 2>/dev/null; claude setup-token', logPath], { interactive: true, timeoutMs: 600000, allowFailure: true });
     return stripAnsi(await readFile(logPath, 'utf8').catch(() => ''));
   } finally {
-    await rm(logPath, { force: true });
+    await rm(dir, { recursive: true, force: true });
   }
 }
 

@@ -60,3 +60,15 @@ EOF
   grep -n '^umask 077$' "$BATS_TEST_DIRNAME/../../install.sh"
   [ "$(grep -n '^umask 077$' "$BATS_TEST_DIRNAME/../../install.sh" | cut -d: -f1)" -lt "$(grep -n 'mktemp' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)" ]
 }
+
+@test "reconnects stdin to the terminal before exec so a piped install can still prompt" {
+  # The README's headline one-liner is `curl ... | bash`, which makes the script's stdin the pipe. `exec` inherits
+  # it, so the CLI saw no tty and exited 3 with "Unable to run interactively" -- the advertised picker could never
+  # appear. Reconnect /dev/tty when stdin is not a terminal and one is available.
+  run grep -n 'dev/tty' "$BATS_TEST_DIRNAME/../../install.sh"
+  [ "$status" -eq 0 ]
+  # and it must come before the exec, not after
+  tty_line=$(grep -n 'dev/tty' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)
+  exec_line=$(grep -n '^exec "' "$BATS_TEST_DIRNAME/../../install.sh" | head -1 | cut -d: -f1)
+  [ "$tty_line" -lt "$exec_line" ]
+}

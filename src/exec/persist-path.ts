@@ -32,7 +32,10 @@ export async function persistToolPath(ctx: Ctx): Promise<string[]> {
   const dirs: string[] = [];
   for (const d of toolDirs(ctx.host, ctx.env)) if (d.startsWith(`${home}/`) && (await exists(d))) dirs.push(d);
   if (!dirs.length) return [];
-  const block = `export PATH="${dirs.join(':')}:$PATH"`;
+  // Inside double quotes the shell still expands $, backticks and \, so a home directory containing any of them
+  // would rewrite PATH into something else on every login. Escape them; $PATH itself must stay expandable.
+  const esc = (d: string) => d.replace(/(["\\$`])/g, '\\$1');
+  const block = `export PATH="${dirs.map(esc).join(':')}:$PATH"`;
   const written: string[] = [];
   for (const rc of RC_FILES) {
     const path = join(ctx.host.home, rc);

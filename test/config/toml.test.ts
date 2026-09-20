@@ -54,3 +54,26 @@ describe('toml', () => {
     expect(readFileSync(f, 'utf8')).toBe('[mcp_servers.x]\ncommand = "npx"\n');
   });
 });
+
+describe('two settings sharing the managed block', () => {
+  it('merges into the existing block instead of replacing it', async () => {
+    // Every codexToml component writes only its own keys. Replacing the single managed block wholesale meant the
+    // second component erased the first, so one setting was always missing and both re-applied on every run.
+    const dir = mkdtempSync(join(tmpdir(), 'sai-toml-'));
+    const path = join(dir, 'config.toml');
+    await writeTomlMarkerBlock(path, { experimental_use_rmcp_client: true }, dir);
+    await writeTomlMarkerBlock(path, { history: { persistence: 'none' } }, dir);
+    const parsed = await readToml(path);
+    expect(parsed.experimental_use_rmcp_client).toBe(true); // first write survived the second
+    expect(parsed.history).toEqual({ persistence: 'none' });
+  });
+
+  it('a later write still updates a key it owns', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sai-toml-'));
+    const path = join(dir, 'config.toml');
+    await writeTomlMarkerBlock(path, { a: 1, b: 2 }, dir);
+    await writeTomlMarkerBlock(path, { b: 3 }, dir);
+    const parsed = await readToml(path);
+    expect(parsed).toMatchObject({ a: 1, b: 3 });
+  });
+});

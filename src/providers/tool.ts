@@ -190,7 +190,9 @@ async function installNode(ctx: Ctx, name: string): Promise<NodeInstallResult> {
     return { ok: true, note: null };
   }
   if ((h.isRoot || h.isProxmoxHost) && h.pkgManager === 'apt') {
-    await ctx.run(['bash', '-c', `curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && apt-get install -y nodejs`], { timeoutMs: 600000 });
+    // A fixed /tmp path run as root is a symlink hazard: any local user can pre-create it and have root execute
+    // their script, or point it at a root-owned file to truncate. mktemp -d gives us a 0700 directory we own.
+    await ctx.run(['bash', '-c', `set -eu; t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT; curl -fsSL --proto '=https' --tlsv1.2 https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o "$t/nodesource_setup.sh" && bash "$t/nodesource_setup.sh" && apt-get install -y nodejs`], { timeoutMs: 600000 });
     return { ok: true, note: null };
   }
   if (h.isRoot && h.pkgManager) {

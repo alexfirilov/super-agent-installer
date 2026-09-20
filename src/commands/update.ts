@@ -2,6 +2,7 @@ import type { Ctx } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
 import { executeGrouped } from '../executor.js';
+import { persistToolPath } from '../exec/persist-path.js';
 import { readState, writeState, buildState } from '../state/state.js';
 import { driftReport } from '../update/drift.js';
 import { renderPlan, renderSummary, postInstallHints } from './summary.js';
@@ -19,6 +20,7 @@ export async function runUpdate(ctx: Ctx, o: UpdateOpts): Promise<number> {
   if (!o.json) console.log(renderPlan(preview.actions));
   if (ctx.dryRun) return 0;
   const result = await executeGrouped(sel, ctx, 'update');
+  await persistToolPath(ctx); // update installs missing components too, and their dirs must reach the next shell
   const drift = await driftReport(ctx, sel.components);
   if (o.json) console.log(JSON.stringify({ records: result.records, drift }, null, 2)); else { console.log('\n' + renderSummary(result.records)); console.log('\n' + table(drift.map((r) => [r.id, r.installed ?? '-', r.latest ?? '-', r.status]), ['component', 'installed', 'latest', 'status'])); const hints = postInstallHints(ctx, sel.components, result.records); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
   await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { runUninstall } from '../../src/commands/uninstall.js';
 import { registerProvider, clearProviders } from '../../src/providers/registry.js';
 import { action } from '../../src/providers/types.js';
@@ -120,5 +121,37 @@ describe('runUninstall provenance guard (2026-09-19 incident: uninstall removed 
     expect(code).toBe(1);
     expect(ctx.log.lines.some((l) => /--all/.test(l))).toBe(true);
     expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).installed.a).toBeDefined();
+  });
+});
+
+describe('runUninstall cleans up what install left outside the component list', () => {
+  it('removes the secrets file and both rc marker blocks on --all', async () => {
+    // Nothing ever deleted <stateDir>/secrets.env -- which holds a captured CLAUDE_CODE_OAUTH_TOKEN -- nor the
+    // `super-agent-installer secrets`/`path` blocks that keep sourcing it from every future shell.
+    clearProviders(); registerProvider(fakeProvider({ a: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    mkdirSync(ctx.paths.stateDir, { recursive: true });
+    const secrets = join(ctx.paths.stateDir, 'secrets.env');
+    writeFileSync(secrets, "# >>> super-agent-installer secrets >>>\nexport K='v'\n# <<< super-agent-installer secrets <<<\n");
+    const profile = join(ctx.host.home, '.profile');
+    writeFileSync(profile, `# mine\n# >>> super-agent-installer secrets >>>\n[ -f "${secrets}" ] && . "${secrets}"\n# <<< super-agent-installer secrets <<<\n# >>> super-agent-installer path >>>\nexport PATH="$HOME/go/bin:$PATH"\n# <<< super-agent-installer path <<<\n`);
+    await writeState(ctx.paths.stateFile, initialState(['a'], { a: { version: '1', at: 't' } }));
+    expect(await runUninstall(ctx, undefined, { installerVersion: '0.1.0', all: true })).toBe(0);
+    expect(existsSync(secrets)).toBe(false);
+    const text = readFileSync(profile, 'utf8');
+    expect(text).not.toContain('super-agent-installer secrets');
+    expect(text).not.toContain('super-agent-installer path');
+    expect(text).toContain('# mine'); // the user's own lines survive
+  });
+
+  it('leaves secrets alone when only some components are removed', async () => {
+    clearProviders(); registerProvider(fakeProvider({ a: 'ok', b: 'ok' }));
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    mkdirSync(ctx.paths.stateDir, { recursive: true });
+    const secrets = join(ctx.paths.stateDir, 'secrets.env');
+    writeFileSync(secrets, 'export K=v\n');
+    await writeState(ctx.paths.stateFile, initialState(['a', 'b'], { a: { version: '1', at: 't' }, b: { version: '1', at: 't' } }));
+    expect(await runUninstall(ctx, ['a'], { installerVersion: '0.1.0' })).toBe(0);
+    expect(existsSync(secrets)).toBe(true);
   });
 });

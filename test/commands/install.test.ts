@@ -209,3 +209,18 @@ describe('runInstall exit code for auth-blocked components', () => {
     try { expect(await runInstall(plain, { profile: 'all', installerVersion: '0.1.0', noLogin: true })).toBe(0); } finally { console.log = orig2; }
   });
 });
+
+describe('partial runs do not shrink the saved selection', () => {
+  it('install --only keeps the other components in selectedIds', async () => {
+    // `install --only x` rewrote selectedIds to just x's closure, so every other component silently dropped out of
+    // update, check and uninstall forever -- the host quietly stopped being managed.
+    clearProviders(); registerProvider(fake([]));
+    const ctx = makeTestCtx({ manifest });
+    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true });
+    const full = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds as string[];
+    expect(full).toEqual(['a', 'b']);
+    await runInstall(ctx, { only: ['a'], installerVersion: '0.1.0', noLogin: true });
+    const after = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds as string[];
+    for (const id of full) expect(after, `${id} dropped out of the saved selection`).toContain(id);
+  });
+});

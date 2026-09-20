@@ -1,7 +1,7 @@
-import { readFile, access, chmod, stat } from 'node:fs/promises';
+import { readFile, access, chmod, stat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Ctx } from '../types.js';
-import { setMarkerBlock } from '../config/markers.js';
+import { setMarkerBlock, removeMarkerBlock } from '../config/markers.js';
 import { writeTextAtomic } from '../config/json.js';
 
 const MAX_VALUE_LEN = 1024; // setx/registry write limit (see research-v02.md B3): reject rather than silently truncate
@@ -103,4 +103,27 @@ async function persistPosix(ctx: Ctx, vars: Map<string, string>): Promise<Persis
 export async function persistSecrets(ctx: Ctx, vars: Map<string, string>): Promise<PersistResult> {
   if (ctx.dryRun || !vars.size) return { persisted: [], failed: [] };
   return ctx.host.platform === 'windows' ? persistWindows(ctx, vars) : persistPosix(ctx, vars);
+}
+
+/**
+ * Undoes `persistSecrets` on POSIX: deletes `<stateDir>/secrets.env` and drops the marker blocks that source it.
+ * Nothing did this before, so an uninstalled host kept a 0600 file holding a captured CLAUDE_CODE_OAUTH_TOKEN and
+ * kept exporting it from every new shell. The user's own rc content is untouched -- only our blocks go.
+ */
+export async function removePersistedSecrets(ctx: Ctx): Promise<string[]> {
+  if (ctx.dryRun) return [];
+  const removed: string[] = [];
+  const secretsPath = join(ctx.paths.stateDir, 'secrets.env');
+  if (await fileExists(secretsPath)) { await rm(secretsPath, { force: true }); removed.push(secretsPath); }
+  for (const rc of ['.profile', '.bashrc', '.zshrc']) {
+    const path = join(ctx.host.home, rc);
+    if (!(await fileExists(path))) continue;
+    const before = await readIfExists(path);
+    let after = before;
+    for (const style of ['hashSecrets', 'hashPath'] as const) {
+      try { after = removeMarkerBlock(after, style); } catch { /* half or duplicated block: leave it for the user */ }
+    }
+    if (after !== before) { await writeTextAtomic(path, after); removed.push(path); }
+  }
+  return removed;
 }

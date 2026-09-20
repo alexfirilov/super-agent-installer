@@ -58,6 +58,7 @@ export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   const result = await executeGrouped(sel, ctx, 'install', { afterKind: (kind) => (kind === 'agent' ? signInAndSecrets() : undefined) });
   await persistToolPath(ctx); // gopls lands in ~/go/bin and the node fallback in ~/.local/bin: the next shell must see both
   if (o.json) console.log(JSON.stringify({ selection: sel.components.map((c) => c.id), records: result.records }, null, 2)); else { console.log('\n' + renderSummary(result.records)); const hints = postInstallHints(ctx, sel.components, result.records, { persistSkipped: !!o.noPersistSecrets, signIn: { agents: signInAgents, attempted: !o.noLogin } }); if (hints.length) console.log('\nNext steps:\n- ' + hints.join('\n- ')); }
-  await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel));
+  // a partial run must widen the saved selection, never replace it
+  await writeState(ctx.paths.stateFile, buildState(state, sel, result.records, result.plan.detections, o.installerVersion, ctx.channel, { mergeSelected: Boolean(o.only?.length) }));
   return result.failed ? 1 : result.blocked ? 2 : 0; // 2: nothing failed, but a component was skipped because its agent is not signed in (D1)
 }

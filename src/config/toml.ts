@@ -33,10 +33,25 @@ export function placeTomlMarkerBlock(text: string, block: string): string {
   return [...before, ...(before.length ? [''] : []), ...body, '', ...lines.slice(idx)].join('\n') + '\n';
 }
 
+/** Keys currently inside the managed block, so a second writer adds to it instead of erasing the first one's work. */
+function readTomlMarkerKeys(text: string): Record<string, unknown> {
+  const { start, end } = MARKER_STYLES.hash;
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const s = lines.indexOf(start), e = lines.indexOf(end);
+  if (s === -1 || e === -1 || e < s) return {};
+  try { return parse(lines.slice(s + 1, e).join('\n')) as Record<string, unknown>; } catch { return {}; }
+}
+
+/**
+ * Every caller writes only the keys IT owns, and they all share one managed block. Replacing the block wholesale
+ * therefore made the last writer erase the previous one -- with two codexToml settings, one was always missing and
+ * both re-applied on every run. Merge over what the block already holds; a key a caller owns still wins.
+ */
 export async function writeTomlMarkerBlock(path: string, keys: Record<string, unknown>, backupsDir: string): Promise<{ changed: boolean }> {
   let text = '';
   try { text = await readFile(path, 'utf8'); } catch { text = ''; }
-  const next = placeTomlMarkerBlock(text, stringify(keys).trim());
+  const merged = { ...readTomlMarkerKeys(text), ...keys };
+  const next = placeTomlMarkerBlock(text, stringify(merged).trim());
   if (next === text.replace(/\r\n/g, '\n')) return { changed: false };
   try { parse(next); } catch (e) { throw new TomlError(`refusing to write ${path}: merged file does not parse (${(e as Error).message}). A key inside the managed block probably duplicates one outside it.`); }
   await backupFile(path, backupsDir);

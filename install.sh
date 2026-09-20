@@ -58,7 +58,9 @@ fetch() {
   if need curl; then
     curl --proto '=https' --tlsv1.2 -fsSL --retry 3 -o "$2" "$1"
   else
-    wget -q -O "$2" "$1"
+    # match curl's --proto '=https': without it a redirect or a tampered SAI_BASE_URL can pull the binary
+    # (and SHA256SUMS, which is our only integrity check) over plaintext http
+    wget -q --https-only -O "$2" "$1"
   fi
 }
 
@@ -102,4 +104,8 @@ esac
 say "installed to ${SAI_INSTALL_DIR}/super-agent-installer"
 [ "$NO_RUN" = 1 ] && exit 0
 rm -rf "$tmp"
+# `curl ... | bash` makes this script's stdin the pipe from curl, and exec inherits it -- so the installer saw no
+# terminal and refused to run interactively, meaning the README's headline one-liner could never show the picker.
+# Hand it the real terminal when there is one; in genuine CI there is no /dev/tty and the existing --yes path applies.
+[ -t 0 ] || { [ -e /dev/tty ] && exec < /dev/tty; } 2>/dev/null || true
 exec "$SAI_INSTALL_DIR/super-agent-installer" "$@"

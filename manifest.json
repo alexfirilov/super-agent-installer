@@ -291,7 +291,7 @@
           "winget": "BurntSushi.ripgrep.MSVC",
           "scoop": "ripgrep",
           "script": {
-            "linux": "set -eu; d=\"$HOME/.local/bin\"; mkdir -p \"$d\"; case \"$(uname -m)\" in x86_64) pat=x86_64-unknown-linux-musl;; aarch64|arm64) pat=aarch64-unknown-linux-gnu;; *) echo \"unsupported arch\" >&2; exit 1;; esac; url=$(curl -fsSL https://api.github.com/repos/BurntSushi/ripgrep/releases/latest | grep -o \"https://[^\\\"]*ripgrep-[^\\\"]*${pat}[.]tar[.]gz\" | head -1); [ -n \"$url\" ] || { echo \"no ripgrep asset for this arch\" >&2; exit 1; }; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; curl -fsSL \"$url\" -o \"$t/rg.tgz\"; tar -xzf \"$t/rg.tgz\" -C \"$t\" --strip-components=1; install -m 0755 \"$t/rg\" \"$d/rg\""
+            "linux": "set -eu; d=\"$HOME/.local/bin\"; mkdir -p \"$d\"; case \"$(uname -m)\" in x86_64) pat=x86_64-unknown-linux-musl;; aarch64|arm64) pat=aarch64-unknown-linux-gnu;; *) echo \"unsupported arch\" >&2; exit 1;; esac; url=$(curl -fsSL https://api.github.com/repos/BurntSushi/ripgrep/releases/latest | grep -o \"https://[^\\\"]*ripgrep-[^\\\"]*${pat}[.]tar[.]gz\" | head -1); [ -n \"$url\" ] || { echo \"no ripgrep asset for this arch\" >&2; exit 1; }; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; curl -fsSL \"$url\" -o \"$t/rg.tgz\"; curl -fsSL \"$url.sha256\" -o \"$t/rg.sha256\"; want=$(cut -d\" \" -f1 < \"$t/rg.sha256\"); got=$(sha256sum \"$t/rg.tgz\" | cut -d\" \" -f1); [ \"$want\" = \"$got\" ] || { echo \"ripgrep checksum mismatch: $want != $got\" >&2; exit 1; }; tar -xzf \"$t/rg.tgz\" -C \"$t\" --strip-components=1; install -m 0755 \"$t/rg\" \"$d/rg\""
           }
         }
       }
@@ -328,7 +328,7 @@
           "winget": "GitHub.cli",
           "scoop": "gh",
           "script": {
-            "linux": "set -eu; d=\"$HOME/.local/bin\"; mkdir -p \"$d\"; case \"$(uname -m)\" in x86_64) pat=linux_amd64;; aarch64|arm64) pat=linux_arm64;; *) echo \"unsupported arch\" >&2; exit 1;; esac; url=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | grep -o \"https://[^\\\"]*gh_[^\\\"]*_${pat}[.]tar[.]gz\" | head -1); [ -n \"$url\" ] || { echo \"no gh asset for this arch\" >&2; exit 1; }; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; curl -fsSL \"$url\" -o \"$t/gh.tgz\"; tar -xzf \"$t/gh.tgz\" -C \"$t\" --strip-components=1; install -m 0755 \"$t/bin/gh\" \"$d/gh\""
+            "linux": "set -eu; d=\"$HOME/.local/bin\"; mkdir -p \"$d\"; case \"$(uname -m)\" in x86_64) pat=linux_amd64;; aarch64|arm64) pat=linux_arm64;; *) echo \"unsupported arch\" >&2; exit 1;; esac; api=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest); url=$(printf %s \"$api\" | grep -o \"https://[^\\\"]*gh_[^\\\"]*_${pat}[.]tar[.]gz\" | head -1); sums=$(printf %s \"$api\" | grep -o \"https://[^\\\"]*_checksums[.]txt\" | head -1); [ -n \"$url\" ] && [ -n \"$sums\" ] || { echo \"no gh asset/checksums for this arch\" >&2; exit 1; }; t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; curl -fsSL \"$url\" -o \"$t/gh.tgz\"; curl -fsSL \"$sums\" -o \"$t/sums.txt\"; want=$(grep \" $(basename \"$url\")$\" \"$t/sums.txt\" | cut -d\" \" -f1); got=$(sha256sum \"$t/gh.tgz\" | cut -d\" \" -f1); [ -n \"$want\" ] && [ \"$want\" = \"$got\" ] || { echo \"gh checksum mismatch or missing: $want != $got\" >&2; exit 1; }; tar -xzf \"$t/gh.tgz\" -C \"$t\" --strip-components=1; install -m 0755 \"$t/bin/gh\" \"$d/gh\""
           }
         }
       }
@@ -606,7 +606,7 @@
         "windows",
         "darwin"
       ],
-      "description": "Registers Docker's MCP gateway with both agents (needs Docker Desktop 4.59+ or Docker CE with the MCP plugin)",
+      "description": "Registers Docker's MCP gateway with both agents (needs Docker Desktop 4.59+ or Docker CE with the MCP plugin). Requires Docker Desktop with the MCP Toolkit already installed and running; the installer does not install Docker.",
       "verdict": "optional",
       "defaultSelected": false,
       "popularity": {
@@ -1552,7 +1552,10 @@
         "marketplace": "obsidian-skills",
         "marketplaceSource": "kepano/obsidian-skills",
         "plugin": "obsidian"
-      }
+      },
+      "conflictsWith": [
+        "sk-obsidian"
+      ]
     },
     {
       "id": "cp-ui-ux-pro-max",

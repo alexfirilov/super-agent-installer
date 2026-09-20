@@ -59,3 +59,31 @@ describe('manifest.json', () => {
     for (const c of m.components) if (c.spec.kind === 'skill') { expect(c.audit?.length, c.id).toBeGreaterThan(0); for (const a of c.audit ?? []) expect(`${a.owner}/${a.repo}`, c.id).toBe(c.spec.repo.replace(/^https:\/\/github\.com\//, '')); }
   });
 });
+
+describe('downloaded binaries are verified', () => {
+  it('every script route that fetches a release archive checks a checksum before installing it', async () => {
+    // installNodeFromTarball verifies its nodejs.org download; the rg/gh script routes added for Rocky 9 did not,
+    // so a tampered or truncated release landed straight on a PATH-prepended dir as mode 0755.
+    const m = parseManifest(JSON.parse(readFileSync('manifest.json', 'utf8')));
+    for (const c of m.components) {
+      const script = c.spec.kind === 'tool' ? c.spec.packages.script?.linux : undefined;
+      if (!script || !/curl|wget/.test(script) || !/install -m|tar -x/.test(script)) continue;
+      expect(script, `${c.id} downloads and installs without verifying a checksum`).toMatch(/sha256sum/);
+    }
+  });
+});
+
+describe('conflicts are declared on both sides', () => {
+  it('every conflictsWith has a matching entry on the other component', () => {
+    // resolveSelection's conflict check walks the selection in order, so a one-sided declaration only fires when
+    // the components happen to be visited in the right order -- `--only cp-obsidian,sk-obsidian` installed both.
+    const byId = new Map(m.components.map((c) => [c.id, c]));
+    for (const c of m.components) {
+      for (const other of c.conflictsWith ?? []) {
+        const o = byId.get(other);
+        expect(o, `${c.id} conflicts with unknown id ${other}`).toBeDefined();
+        expect(o!.conflictsWith ?? [], `${other} does not declare its conflict with ${c.id}`).toContain(c.id);
+      }
+    }
+  });
+});

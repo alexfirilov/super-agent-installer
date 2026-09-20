@@ -2,7 +2,12 @@ import type { Channel, HostState, Installed, Selection, StepRecord } from '../ty
 import { readJsonFile, writeJsonAtomic } from '../config/json.js';
 export async function readState(path: string): Promise<HostState | null> { const s = await readJsonFile<HostState>(path); return s && s.version === 1 ? s : null; }
 export async function writeState(path: string, state: HostState): Promise<void> { await writeJsonAtomic(path, state, { mode: 0o600 }); }
-export function buildState(prev: HostState | null, sel: Selection, records: StepRecord[], detections: Record<string, Installed | null>, installerVersion: string, channel: Channel): HostState {
+/**
+ * `mergeSelected` is for runs that touch only part of the host (`--only`, an explicit id list). Replacing
+ * `selectedIds` with that narrow closure silently dropped every other component out of update, check and
+ * uninstall, so the host stopped being managed without anyone being told. Full-profile runs still replace.
+ */
+export function buildState(prev: HostState | null, sel: Selection, records: StepRecord[], detections: Record<string, Installed | null>, installerVersion: string, channel: Channel, opts: { mergeSelected?: boolean } = {}): HostState {
   const installed: HostState['installed'] = { ...(prev?.installed ?? {}) }; const now = new Date().toISOString();
   for (const r of records) {
     if (!r.ok) continue;
@@ -11,5 +16,7 @@ export function buildState(prev: HostState | null, sel: Selection, records: Step
     else if (r.op === 'install' || r.op === 'update' || r.op === 'configure') installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now, byUs: r.changed || (installed[r.componentId]?.byUs ?? false) };
     else if (r.op === 'skip' && !installed[r.componentId] && detections[r.componentId]) installed[r.componentId] = { version: detections[r.componentId]?.version ?? null, at: now, byUs: false };
   }
-  return { version: 1, installerVersion, profile: sel.profile, selectedIds: sel.components.map((c) => c.id), channel, installed, lastRun: now };
+  const selected = sel.components.map((c) => c.id);
+  const selectedIds = opts.mergeSelected ? [...new Set([...(prev?.selectedIds ?? []), ...selected])] : selected;
+  return { version: 1, installerVersion, profile: opts.mergeSelected ? prev?.profile ?? sel.profile : sel.profile, selectedIds, channel, installed, lastRun: now };
 }
