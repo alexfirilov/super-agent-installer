@@ -27,7 +27,7 @@ const component = z.object({
   secrets: z.array(z.object({ env: z.string(), prompt: z.string(), required: z.boolean() })).optional(),
   audit: z.array(z.object({ owner: z.string(), repo: z.string(), skill: z.string() })).optional(), postInstallHint: z.string().optional(), source: z.string().optional(), spec,
 });
-const profile = z.object({ description: z.string(), base: z.enum(['all', 'none']), include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional(), agentFilter: z.enum(['claude', 'codex']).optional(), channel: z.enum(['latest', 'stable']).optional(), headless: z.boolean().optional() });
+const profile = z.object({ description: z.string(), base: z.enum(['all', 'none']), include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional(), agentFilter: z.enum(['claude', 'codex']).optional(), channel: z.enum(['latest', 'stable']).optional() }); // `headless` was accepted here once; it never did anything (headless is detected, not declared) and is ignored if present
 export const manifestSchema = z.object({ version: z.literal(1), profiles: z.partialRecord(z.enum(PROFILE_NAMES), profile), components: z.array(component) });
 // zod 4: z.record with an enum key is exhaustive; partialRecord allows a subset of profiles. If discriminatedUnion rejects the refined mcpSpec, drop the .refine and add the http/stdio check to the manual issues loop below.
 

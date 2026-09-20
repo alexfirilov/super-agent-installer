@@ -44,7 +44,8 @@ export interface Component {
   audit?: Array<{ owner: string; repo: string; skill: string }>;
   postInstallHint?: string; source?: string; spec: Spec;
 }
-export interface Profile { description: string; base: 'all' | 'none'; include?: string[]; exclude?: string[]; agentFilter?: 'claude' | 'codex'; channel?: Channel; headless?: boolean }
+/** `channel`: the release channel a profile installs on when neither `--channel` nor a saved state names one (see `resolveChannel`). */
+export interface Profile { description: string; base: 'all' | 'none'; include?: string[]; exclude?: string[]; agentFilter?: 'claude' | 'codex'; channel?: Channel }
 export interface Manifest { version: 1; profiles: Partial<Record<ProfileName, Profile>>; components: Component[] }
 
 export type PkgManager = 'apt' | 'dnf' | 'yum' | 'pacman' | 'zypper' | 'apk' | 'brew' | 'winget' | 'scoop' | 'choco' | 'nix' | null;
