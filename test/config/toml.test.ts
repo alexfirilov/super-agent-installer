@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readToml, writeTomlMarkerBlock, removeTomlMarkerBlock, tomlTableEquals, TomlError } from '../../src/config/toml.js';
+import { readToml, writeTomlMarkerBlock, removeTomlMarkerBlock, removeTomlMarkerKeys, tomlTableEquals, TomlError } from '../../src/config/toml.js';
 describe('toml', () => {
   it('reads missing file as empty and throws on invalid', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sai-'));
@@ -75,5 +75,31 @@ describe('two settings sharing the managed block', () => {
     await writeTomlMarkerBlock(path, { b: 3 }, dir);
     const parsed = await readToml(path);
     expect(parsed).toMatchObject({ a: 1, b: 3 });
+  });
+});
+
+describe('removing one setting from the shared block', () => {
+  // Finding 4: uninstalling one codexToml setting removed the whole managed block, taking every other setting's
+  // keys with it -- and the next install re-applied them, so uninstall + install oscillated.
+  it('removes only the keys handed to it and keeps the rest of the block', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sai-toml-')); const path = join(dir, 'config.toml');
+    writeFileSync(path, 'model = "x"\n');
+    await writeTomlMarkerBlock(path, { mcp_oauth_callback_port: 12345 }, dir);
+    await writeTomlMarkerBlock(path, { projects: { '/home/u': { trust_level: 'trusted' } } }, dir);
+    expect((await removeTomlMarkerKeys(path, { mcp_oauth_callback_port: 12345 }, dir)).changed).toBe(true);
+    const parsed = await readToml(path);
+    expect(parsed.mcp_oauth_callback_port).toBeUndefined();
+    expect(parsed.projects).toEqual({ '/home/u': { trust_level: 'trusted' } });
+    expect(parsed.model).toBe('x');
+    expect(readFileSync(path, 'utf8')).toContain('# >>> super-agent-installer >>>');
+  });
+  it('drops the block entirely once its last key is gone, and is a no-op on a missing key or file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sai-toml-')); const path = join(dir, 'config.toml');
+    writeFileSync(path, 'model = "x"\n');
+    await writeTomlMarkerBlock(path, { projects: { '/home/u': { trust_level: 'trusted' } } }, dir);
+    expect((await removeTomlMarkerKeys(path, { projects: { '/home/u': { trust_level: 'trusted' } } }, dir)).changed).toBe(true);
+    expect(readFileSync(path, 'utf8')).toBe('model = "x"\n');
+    expect((await removeTomlMarkerKeys(path, { nothing: 1 }, dir)).changed).toBe(false);
+    expect((await removeTomlMarkerKeys(join(dir, 'absent.toml'), { nothing: 1 }, dir)).changed).toBe(false);
   });
 });

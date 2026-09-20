@@ -59,6 +59,35 @@ export async function writeTomlMarkerBlock(path: string, keys: Record<string, un
   return { changed: true };
 }
 
+/** Deletes every leaf of `keys` from `from` (in place), pruning tables that become empty. */
+function deleteLeaves(from: Record<string, unknown>, keys: Record<string, unknown>): void {
+  for (const [k, v] of Object.entries(keys)) {
+    const cur = from[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      deleteLeaves(cur as Record<string, unknown>, v as Record<string, unknown>);
+      if (!Object.keys(cur as Record<string, unknown>).length) delete from[k];
+    } else if (k in from) delete from[k];
+  }
+}
+
+/**
+ * Takes ONE caller's keys back out of the shared managed block and leaves everyone else's in place. Removing the
+ * whole block on the uninstall of a single setting erased the other settings too, which the next install then
+ * re-applied: uninstall + install never converged. The block itself goes only once its last key is gone.
+ */
+export async function removeTomlMarkerKeys(path: string, keys: Record<string, unknown>, backupsDir: string): Promise<{ changed: boolean }> {
+  let text: string;
+  try { text = await readFile(path, 'utf8'); } catch { return { changed: false }; }
+  const remaining = readTomlMarkerKeys(text);
+  deleteLeaves(remaining, keys);
+  const next = Object.keys(remaining).length ? placeTomlMarkerBlock(text, stringify(remaining).trim()) : removeMarkerBlock(text, 'hash');
+  if (next === text.replace(/\r\n/g, '\n')) return { changed: false };
+  try { parse(next); } catch (e) { throw new TomlError(`refusing to write ${path}: merged file does not parse (${(e as Error).message})`); }
+  await backupFile(path, backupsDir);
+  await writeTextAtomic(path, next, { mode: 0o600 });
+  return { changed: true };
+}
+
 export async function removeTomlMarkerBlock(path: string, backupsDir: string): Promise<{ changed: boolean }> {
   let text: string;
   try { text = await readFile(path, 'utf8'); } catch { return { changed: false }; }

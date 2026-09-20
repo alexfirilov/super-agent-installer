@@ -79,3 +79,34 @@ describe('settingProvider', () => {
     expect(JSON.parse(readFileSync(ctx.paths.claudeJson, 'utf8'))).toEqual({ somethingElse: 1 });
   });
 });
+
+describe('two codexToml settings sharing the managed block (Finding 4)', () => {
+  const trust = () => setting('set-codex-trust-home', { target: 'codex', codexToml: { projects: { '${HOME}': { trust_level: 'trusted' } } } });
+  const port = () => setting('set-codex-oauth-port', { target: 'codex', codexToml: { mcp_oauth_callback_port: 12345 } });
+  const apply = async (c: Component, ctx: ReturnType<typeof makeTestCtx>) => { for (const a of await settingProvider.plan(c, ctx, await settingProvider.detect(c, ctx), 'install')) await a.run(ctx); };
+  it('installs both, converges on repeat, keeps one when the other is removed, and does not oscillate', async () => {
+    const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.codexHome, { recursive: true }); writeFileSync(ctx.paths.codexConfig, 'model = "x"\n');
+    // 1: both present after install
+    await apply(trust(), ctx); await apply(port(), ctx);
+    expect(await settingProvider.detect(trust(), ctx)).toEqual({ version: null }); expect(await settingProvider.detect(port(), ctx)).toEqual({ version: null });
+    const after1 = readFileSync(ctx.paths.codexConfig, 'utf8');
+    // 2: repeated install changes nothing
+    expect(await settingProvider.plan(trust(), ctx, await settingProvider.detect(trust(), ctx), 'install')).toEqual([]);
+    expect(await settingProvider.plan(port(), ctx, await settingProvider.detect(port(), ctx), 'install')).toEqual([]);
+    await apply(trust(), ctx); await apply(port(), ctx);
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toBe(after1);
+    // 3: removing one keeps the other
+    await (await settingProvider.plan(port(), ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(await settingProvider.detect(port(), ctx)).toBeNull();
+    expect(await settingProvider.detect(trust(), ctx)).toEqual({ version: null });
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toContain('trust_level = "trusted"');
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).not.toContain('mcp_oauth_callback_port');
+    // 4: installing the survivor again is a no-op, not a rewrite
+    const after3 = readFileSync(ctx.paths.codexConfig, 'utf8');
+    expect(await settingProvider.plan(trust(), ctx, await settingProvider.detect(trust(), ctx), 'install')).toEqual([]);
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toBe(after3);
+    // removing the last one takes the block away and leaves the user's file as it started
+    await (await settingProvider.plan(trust(), ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toBe('model = "x"\n');
+  });
+});

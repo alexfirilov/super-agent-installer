@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
 import { readJsonFile, writeJsonAtomic, backupFile, mergeClaudeSettings } from '../config/json.js';
-import { readToml, writeTomlMarkerBlock, removeTomlMarkerBlock } from '../config/toml.js';
+import { readToml, writeTomlMarkerBlock, removeTomlMarkerKeys } from '../config/toml.js';
 import { getClaudeState } from './claude-plugin.js';
 import { getCodexState } from './codex-plugin.js';
 import { action, ok, fail, skipAction } from './types.js';
@@ -48,7 +48,8 @@ export const settingProvider: Provider = {
           const r = await ctx.run(['codex', 'features', op, k], { allowFailure: true });
           if (r.code !== 0) featureFailures.push(`codex features ${op} ${k} failed: ${(r.stderr || r.stdout).trim()}`);
         }
-        if (s.codexToml && !ctx.dryRun) await removeTomlMarkerBlock(ctx.paths.codexConfig, ctx.paths.backupsDir);
+        // only this setting's keys leave the shared block; another setting's keys in it stay (Finding 4)
+        if (s.codexToml && !ctx.dryRun) await removeTomlMarkerKeys(ctx.paths.codexConfig, expandHome(s.codexToml, ctx.host.home) as Record<string, unknown>, ctx.paths.backupsDir);
         // claudeJsonSeed is a one-time seed; uninstall never removes ~/.claude.json.
         if (featureFailures.length) return fail(featureFailures.join('; '));
         return ok(`${c.name} reverted`);
