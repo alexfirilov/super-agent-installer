@@ -17,17 +17,13 @@ import { removePersistedSecrets } from '../secrets/persist.js';
  */
 export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { json?: boolean; installerVersion: string; force?: boolean; all?: boolean }): Promise<number> {
   const state = await readState(ctx.paths.stateFile);
-  // Refuse only what we know is on the host but did not put there. An id with no record at all is bookkeeping --
-  // the provider's own `if (!installed) return []` makes it a no-op -- so there is nothing to protect.
-  const foreignToUs = (id: string) => state?.installed[id] !== undefined && state.installed[id]?.byUs !== true;
+  // Ours only when the record proves it. No record at all (no state file, a v0.2 state, an id that was never
+  // selected) is UNKNOWN provenance and is treated as foreign: the provider would still detect the host's own copy
+  // and remove it, which is exactly the 2026-09-19 incident again. The refusal is decided after planning, from the
+  // detections, so an id that is not on the host at all stays a harmless bookkeeping no-op.
   const ours = (id: string) => state?.installed[id]?.byUs === true;
   let target: string[];
   if (ids?.length) {
-    const foreign = ids.filter(foreignToUs);
-    if (foreign.length && !o.force) {
-      ctx.log.error(`refusing to remove ${foreign.join(', ')}: this installer did not install ${foreign.length > 1 ? 'them' : 'it'}, so removing ${foreign.length > 1 ? 'them' : 'it'} could break software you rely on. Re-run with --force if you are sure.`);
-      return 1;
-    }
     target = ids;
   } else {
     if (!o.all) {
@@ -42,6 +38,14 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   const resolved = resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: target });
   const wanted = new Set(target); const sel = { ...resolved, components: resolved.components.filter((c) => wanted.has(c.id)) };
   const plan = await buildPlan(sel, ctx, 'uninstall');
+  if (ids?.length && !o.force) {
+    const foreign = target.filter((id) => plan.detections[id] && !ours(id));
+    if (foreign.length) {
+      const them = foreign.length > 1 ? 'them' : 'it';
+      ctx.log.error(`refusing to remove ${foreign.join(', ')}: this installer has no record of installing ${them} (${them === 'it' ? 'it was' : 'they were'} already on the host, or the record predates v0.3.0), so removing ${them} could break software you rely on. Re-run with --force if you are sure.`);
+      return 1;
+    }
+  }
   if (!o.json) console.log(renderPlan(plan.actions));
   if (ctx.dryRun) return 0;
   if (!ctx.yes) { const c = await p.confirm({ message: `Remove ${sel.components.length} component(s)?`, initialValue: false }); if (p.isCancel(c) || !c) return 0; }
