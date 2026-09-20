@@ -12,7 +12,7 @@ describe('persistSecrets on Windows', () => {
     expect(result.failed).toEqual([]);
     expect(ctx.calls).toHaveLength(2);
     for (const argv of ctx.calls) {
-      expect(argv[0]).toBe('powershell.exe');
+      expect(argv[0]!.endsWith('\\WindowsPowerShell\\v1.0\\powershell.exe')).toBe(true); // absolute, never resolved against our extended PATH
       expect(argv.join(' ')).not.toContain('ctx7sk-secret-value');
       expect(argv.join(' ')).not.toContain('ghp_another_secret');
       expect(argv.some((a) => a.includes('SetEnvironmentVariable'))).toBe(true);

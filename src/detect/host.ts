@@ -1,4 +1,5 @@
 import { readFile as fsReadFile, access } from 'node:fs/promises';
+import { powershellExe } from '../exec/win-exe.js';
 import { homedir, userInfo } from 'node:os';
 import type { HostInfo, PkgManager, Platform, Runner } from '../types.js';
 export interface HostDeps { platform: NodeJS.Platform; arch: string; env: Record<string, string | undefined>; homedir: string; uid: number; readFile(p: string): Promise<string | null>; exists(p: string): Promise<boolean>; which(cmd: string): Promise<boolean>; run: Runner }
@@ -26,11 +27,11 @@ export async function detectHost(d: HostDeps): Promise<HostInfo> {
   const claudeRunning = /(^|\s)claude(\.exe)?(\s|$)/m.test(psOut);
   let diskFreeMb: number | null = null;
   if (platform !== 'windows') { const df = await d.run(['df', '-m', home], { readOnly: true, allowFailure: true }); const line = df.stdout.trim().split('\n').pop() ?? ''; const cols = line.split(/\s+/); const n = Number(cols[3]); diskFreeMb = Number.isFinite(n) ? n : null; }
-  else { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', `(Get-PSDrive -Name ($env:USERPROFILE.Substring(0,1))).Free / 1MB`], { readOnly: true, allowFailure: true }); const s = r.stdout.trim(); const n = s ? Number(s) : NaN; diskFreeMb = r.code === 0 && Number.isFinite(n) ? Math.floor(n) : null; }
+  else { const r = await d.run([powershellExe(process.env), '-NoProfile', '-Command', `(Get-PSDrive -Name ($env:USERPROFILE.Substring(0,1))).Free / 1MB`], { readOnly: true, allowFailure: true }); const s = r.stdout.trim(); const n = s ? Number(s) : NaN; diskFreeMb = r.code === 0 && Number.isFinite(n) ? Math.floor(n) : null; }
   let windowsDeveloperMode: boolean | null = null;
   if (platform === 'windows') { const r = await d.run(['reg.exe', 'query', 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock', '/v', 'AllowDevelopmentWithoutDevLicense'], { readOnly: true, allowFailure: true }); windowsDeveloperMode = r.code === 0 ? /0x1/.test(r.stdout) : false; }
   let isElevated: boolean | null = null;
-  if (platform === 'windows') { const r = await d.run(['powershell.exe', '-NoProfile', '-Command', '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'], { readOnly: true, allowFailure: true }); isElevated = r.code === 0 ? /true/i.test(r.stdout) : false; }
+  if (platform === 'windows') { const r = await d.run([powershellExe(process.env), '-NoProfile', '-Command', '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'], { readOnly: true, allowFailure: true }); isElevated = r.code === 0 ? /true/i.test(r.stdout) : false; }
   return {
     platform, arch, isRoot, hasSudo: platform !== 'windows' && !isRoot && (await d.which('sudo')), pkgManager,
     isWsl: /microsoft/i.test(version ?? '') || !!d.env.WSL_DISTRO_NAME, isProxmoxHost: platform === 'linux' && ((await d.which('pveversion')) || (await d.exists('/etc/pve/.version'))),

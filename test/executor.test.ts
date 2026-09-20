@@ -56,7 +56,7 @@ describe('refreshEnvironment', () => {
   });
   it('also merges any registry PATH entry missing from process.env.PATH on Windows, exactly once across two calls', async () => {
     const registryPath = 'C:\\Program Files\\Go\\bin;C:\\Users\\u\\AppData\\Roaming\\npm';
-    const psProbe = ['powershell', '-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"].join(' ');
+    const psProbe = ['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', '-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"].join(' ');
     const ctx = makeTestCtx({ host: { platform: 'windows', home: 'C:\\Users\\u' }, responses: { [psProbe]: registryPath } });
     process.env.PATH = 'C:\\Windows\\system32';
     await refreshEnvironment(ctx);

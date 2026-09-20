@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { powershellExe } from '../exec/win-exe.js';
 import { join } from 'node:path';
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
@@ -17,7 +18,7 @@ async function removeNpmConflict(ctx: Ctx): Promise<void> {
 async function runInstaller(ctx: Ctx): Promise<void> {
   const h = ctx.host;
   if (h.platform === 'darwin' && h.pkgManager === 'brew') await ctx.run(['brew', 'install', '--cask', 'codex'], { timeoutMs: 600000 });
-  else if (h.platform === 'windows') await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', PS], { timeoutMs: 600000 });
+  else if (h.platform === 'windows') await ctx.run([powershellExe(ctx.env), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', PS], { timeoutMs: 600000 });
   else await ctx.run(['sh', '-c', SH], { env: { CODEX_NON_INTERACTIVE: '1' }, timeoutMs: 600000 });
 }
 async function sandboxNote(ctx: Ctx): Promise<string> {

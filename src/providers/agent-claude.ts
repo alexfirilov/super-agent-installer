@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { powershellExe } from '../exec/win-exe.js';
 import { join } from 'node:path';
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
@@ -44,7 +45,7 @@ export const claudeAgentProvider: Provider = {
           await ctx.run(['bash', '-c', `printf 'deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/${ctx.channel} ${ctx.channel} main\\n' > /etc/apt/sources.list.d/claude-code.list`]);
           await ctx.run(['apt-get', 'update']); await ctx.run(['apt-get', 'install', '-y', 'claude-code']);
         } else if (h.platform === 'darwin' && h.pkgManager === 'brew') { await ctx.run(['brew', 'install', '--cask', ctx.channel === 'latest' ? 'claude-code@latest' : 'claude-code']); }
-        else if (h.platform === 'windows') { await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm -UseBasicParsing https://claude.ai/install.ps1))) ${ctx.channel}`], { timeoutMs: 600000 }); }
+        else if (h.platform === 'windows') { await ctx.run([powershellExe(ctx.env), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm -UseBasicParsing https://claude.ai/install.ps1))) ${ctx.channel}`], { timeoutMs: 600000 }); }
         else { await ctx.run(['bash', '-c', `curl -fsSL https://claude.ai/install.sh | bash -s ${ctx.channel}`], { timeoutMs: 600000 }); }
         if (h.platform === 'linux' && h.isMusl) { await patchSettings(ctx, { env: { USE_BUILTIN_RIPGREP: '0' } }); }
         await setChannel(ctx);

@@ -38,10 +38,10 @@ describe('toolProvider', () => {
     expect(present.calls).toContainEqual(['scoop', '--version']);
     expect(present.calls).toContainEqual(['scoop', 'install', 'jq']);
     expect(present.calls.some((a) => a[0] === 'winget')).toBe(false);
-    const absent = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': { code: 1 }, 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex': '', 'scoop install jq': '' } });
+    const absent = makeTestCtx({ host: { platform: 'windows' }, responses: { 'scoop --version': { code: 1 }, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex': '', 'scoop install jq': '' } });
     const r2 = await (await toolProvider.plan(tool('jq', { packages: { scoop: 'jq', winget: 'jqlang.jq' } }), absent, null, 'install'))[0]!.run(absent);
     expect(r2.ok).toBe(true);
-    const bootstrapIdx = absent.calls.findIndex((a) => a.join(' ') === 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex');
+    const bootstrapIdx = absent.calls.findIndex((a) => a.join(' ') === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command irm get.scoop.sh | iex');
     const installIdx = absent.calls.findIndex((a) => a.join(' ') === 'scoop install jq');
     expect(bootstrapIdx).toBeGreaterThanOrEqual(0); expect(installIdx).toBeGreaterThan(bootstrapIdx);
   });

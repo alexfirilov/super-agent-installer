@@ -1,4 +1,5 @@
 import { readFile, access, chmod, stat, rm } from 'node:fs/promises';
+import { powershellExe } from '../exec/win-exe.js';
 import { join } from 'node:path';
 import type { Ctx } from '../types.js';
 import { setMarkerBlock, removeMarkerBlock } from '../config/markers.js';
@@ -25,7 +26,7 @@ async function persistWindows(ctx: Ctx, vars: Map<string, string>): Promise<Pers
     if (value.length > MAX_VALUE_LEN) { failed.push({ name, reason: `value is ${value.length} characters, over the ${MAX_VALUE_LEN}-character setx/registry limit` }); continue; }
     const safeName = name.replace(/'/g, "''"); // PowerShell single-quoted string escape; env var names shouldn't contain quotes, but never trust it
     try {
-      const r = await ctx.run(['powershell.exe', '-NoProfile', '-Command', `[Environment]::SetEnvironmentVariable('${safeName}', $env:SAI_SECRET_VALUE, 'User')`], { env: { SAI_SECRET_VALUE: value }, allowFailure: true });
+      const r = await ctx.run([powershellExe(ctx.env), '-NoProfile', '-Command', `[Environment]::SetEnvironmentVariable('${safeName}', $env:SAI_SECRET_VALUE, 'User')`], { env: { SAI_SECRET_VALUE: value }, allowFailure: true });
       if (r.code === 0) { persisted.push(name); ctx.log.info(`persisted ${name} to the user environment`); }
       else failed.push({ name, reason: `powershell exited ${r.code}` });
     } catch (e) {

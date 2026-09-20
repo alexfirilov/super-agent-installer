@@ -1,4 +1,5 @@
 import { access, constants, rm, stat } from 'node:fs/promises';
+import { powershellExe } from '../exec/win-exe.js';
 import { dirname, join } from 'node:path';
 import type { Action, Component, Ctx, Installed, Provider, ToolSpec } from '../types.js';
 import { probeVersion } from '../detect/tools.js';
@@ -53,7 +54,7 @@ const WINGET_USER_SCOPE_IDS = new Set<string>(['Git.Git']);
 async function ensureScoop(ctx: Ctx): Promise<true | string> {
   if (ctx.host.isElevated) return 'scoop rejects elevated shells; rerun without admin, or use --elevate';
   if ((await ctx.run(['scoop', '--version'], { readOnly: true, allowFailure: true })).code === 0) return true;
-  const r = await ctx.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm get.scoop.sh | iex'], { timeoutMs: 600000, allowFailure: true });
+  const r = await ctx.run([powershellExe(ctx.env), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm get.scoop.sh | iex'], { timeoutMs: 600000, allowFailure: true });
   return r.code === 0 ? true : `failed to bootstrap scoop: ${(r.stderr || r.stdout).trim() || `exit ${r.code}`}`;
 }
 
@@ -358,7 +359,7 @@ export const toolProvider: Provider = {
         return ok(`${c.name} ${op === 'install' ? 'installed' : 'updated'} into ${join(gopath, 'bin')}`);
       }
       else if (p.uvTool) await ctx.run(['uv', 'tool', 'install', p.uvTool], { timeoutMs: 600000 });
-      else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
+      else if (p.script?.[h.platform]) await ctx.run(h.platform === 'windows' ? [powershellExe(ctx.env), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', p.script[h.platform]!] : ['sh', '-c', p.script[h.platform]!], { timeoutMs: 600000 });
       else if (needsAdmin) return fail(`needs admin: rerun with --elevate, or install ${c.name} yourself`);
       else return fail(`${c.name}: no install route for ${h.platform}/${h.pkgManager ?? 'no package manager'}`);
       await post();

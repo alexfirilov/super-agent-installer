@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { powershellExe } from './win-exe.js';
 import type { Ctx, HostInfo } from '../types.js';
 /**
  * Directories the vendor installers drop binaries into during a run (Claude/Codex native installs, fnm's Node, npm
@@ -56,7 +57,7 @@ export async function readSystemPath(ctx: Ctx): Promise<string[]> {
   if (ctx.host.platform !== 'windows') return [];
   try {
     const r = await ctx.run(
-      ['powershell', '-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"],
+      [powershellExe(ctx.env), '-NoProfile', '-Command', "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"],
       { readOnly: true, allowFailure: true },
     );
     if (r.code !== 0) return [];
