@@ -87,3 +87,14 @@ describe('conflicts are declared on both sides', () => {
     }
   });
 });
+
+describe('npx-based MCP servers', () => {
+  it('always pass -y, so a first run cannot stall on npx asking to install', () => {
+    // mcp-n8n-claude was the only one missing it: on a host without the package cached, npx prompts and the
+    // server never starts.
+    for (const c of m.components) {
+      if (c.spec.kind !== 'mcp' || c.spec.command !== 'npx') continue;
+      expect(c.spec.args ?? [], `${c.id} runs npx without -y`).toContain('-y');
+    }
+  });
+});

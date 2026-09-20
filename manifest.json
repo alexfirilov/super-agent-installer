@@ -2900,6 +2900,7 @@
         "transport": "stdio",
         "command": "npx",
         "args": [
+          "-y",
           "n8n-mcp"
         ],
         "env": {
