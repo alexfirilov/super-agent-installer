@@ -9,7 +9,7 @@ describe('manifest.json', () => {
   it('validates and contains the approved core', () => {
     const ids = m.components.map((c) => c.id);
     for (const id of ['claude-code', 'codex-cli', 'node', 'git', 'uv', 'caveman-cli', 'playwright-cli', 'typescript-language-server', 'pyright', 'gopls', 'cp-superpowers', 'cp-caveman', 'cp-security-guidance', 'cp-context7', 'cp-commit-commands', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'cp-skill-creator', 'cp-feature-dev', 'cp-claude-md-management', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'cp-playwright', 'cp-remember', 'cp-plugin-dev', 'cp-pr-review-toolkit', 'cp-code-review', 'cp-code-simplifier', 'cp-ralph-loop', 'cp-claude-code-setup', 'sk-find-skills', 'sk-caveman-codex', 'sk-cc-devops', 'sk-linux-admin', 'sk-powershell-windows', 'mcp-cx-context7', 'mcp-cx-exa', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'sl-claude-hud', 'instr-global', 'set-codex-memories', 'set-windows-git-symlinks', 'ccusage', 'happy', 'agent-notifications', 'cx-remember']) expect(ids, id).toContain(id);
-    expect(Object.keys(m.profiles).sort()).toEqual(['all', 'claude-only', 'codex-only', 'homelab', 'minimal', 'proxmox-host', 'work']);
+    expect(Object.keys(m.profiles).sort()).toEqual(['all', 'claude-only', 'codex-only', 'devops', 'homelab', 'minimal', 'proxmox-host', 'work']);
   });
   it('profile all on linux has no slot conflicts, respects forceOff, stays under the token warning', () => {
     const s = resolveSelection(m, host('linux'), { profile: 'all' });
@@ -23,6 +23,14 @@ describe('manifest.json', () => {
   it('windows all includes powershell skill and excludes linux-only items', () => {
     const s = resolveSelection(m, host('windows'), { profile: 'all' }); const ids = s.components.map((c) => c.id);
     expect(ids).toContain('sk-powershell-windows'); expect(ids).toContain('set-windows-git-symlinks'); expect(ids).not.toContain('sk-linux-admin'); expect(ids).not.toContain('bubblewrap');
+  });
+  it('devops is the operations preset: core agents and skills, no browser tooling, no LSPs, no infrastructure MCPs', () => {
+    const lin = resolveSelection(m, host('linux'), { profile: 'devops' }); const ids = lin.components.map((c) => c.id);
+    for (const id of ['claude-code', 'codex-cli', 'git', 'jq', 'ripgrep', 'gh', 'cp-superpowers', 'cp-caveman', 'cp-context7', 'cp-security-guidance', 'sk-cc-devops', 'sk-linux-admin', 'mcp-cx-context7', 'instr-global']) expect(ids, id).toContain(id);
+    for (const id of ['cp-playwright', 'cp-chrome-devtools-mcp', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'mcp-proxmox-claude', 'mcp-ha-claude', 'mcp-k8s-claude', 'mcp-tailscale-claude', 'sk-powershell-windows']) expect(ids, id).not.toContain(id);
+    expect(lin.tokenTotals.claude).toBeLessThan(8000); expect(lin.codexMcpCount).toBeLessThanOrEqual(5);
+    const win = resolveSelection(m, host('windows'), { profile: 'devops' }).components.map((c) => c.id);
+    expect(win).toContain('sk-powershell-windows'); expect(win).toContain('set-windows-git-symlinks'); expect(win).not.toContain('sk-linux-admin');
   });
   it('proxmox-host is lean and headless', () => {
     const s = resolveSelection(m, host('linux'), { profile: 'proxmox-host' }); const ids = s.components.map((c) => c.id);

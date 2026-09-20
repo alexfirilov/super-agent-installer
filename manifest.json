@@ -22,6 +22,33 @@
         "instr-global"
       ]
     },
+    "devops": {
+      "description": "Agents + superpowers/caveman/context7 + git/jq/rg/gh + security, Linux, DevOps and PowerShell skills; no browser tooling, no language servers, no infrastructure MCPs",
+      "base": "none",
+      "include": [
+        "claude-code",
+        "codex-cli",
+        "git",
+        "node",
+        "jq",
+        "ripgrep",
+        "gh",
+        "cp-superpowers",
+        "cp-caveman",
+        "cp-context7",
+        "cp-security-guidance",
+        "cp-commit-commands",
+        "sk-find-skills",
+        "sk-caveman-codex",
+        "sk-cc-devops",
+        "sk-linux-admin",
+        "sk-powershell-windows",
+        "mcp-cx-context7",
+        "set-codex-memories",
+        "set-windows-git-symlinks",
+        "instr-global"
+      ]
+    },
     "claude-only": {
       "description": "Claude Code side only",
       "base": "all",

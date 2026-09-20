@@ -24,8 +24,17 @@ async function agentsToSignIn(ctx: Ctx, components: Component[]): Promise<Array<
   }
   return agents;
 }
+/** The blast radius of an autonomous agent is whatever the account it runs under can do. On a hypervisor, or as root
+ * anywhere, that is the whole host -- say so before installing, every run, without blocking an expert who chose it. */
+export function blastRadiusWarning(ctx: Ctx): string | null {
+  const h = ctx.host;
+  if (h.isProxmoxHost) return `this installs autonomous AI tooling directly on a Proxmox hypervisor${h.isRoot ? ' as root' : ''}: Claude Code and Codex can then run commands against the host, its storage and every guest. For production, run them in a dedicated management VM or container instead.`;
+  if (h.isRoot && h.platform === 'linux') return 'this installs autonomous AI tooling as root: the agents can then run any command with root rights on this host. Prefer a normal user account with sudo.';
+  return null;
+}
 export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.isNixOS) { console.error(NIX_SNIPPET); return 4; }
+  const blast = blastRadiusWarning(ctx); if (blast) ctx.log.warn(`WARNING: ${blast}`);
   const state = await readState(ctx.paths.stateFile);
   const profileName = o.profile ?? state?.profile;
   ctx.channel = resolveChannel(o.channel, state, profileName && profileName !== 'saved' ? ctx.manifest.profiles[profileName] : undefined);

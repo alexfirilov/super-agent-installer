@@ -6,7 +6,7 @@ describe('types', () => {
   it('exports kind, slot and profile constants', () => {
     expect(KINDS).toContain('claude-plugin');
     expect(SLOTS).toContain('statusline');
-    expect(PROFILE_NAMES).toEqual(['all', 'minimal', 'claude-only', 'codex-only', 'work', 'homelab', 'proxmox-host']);
+    expect(PROFILE_NAMES).toEqual(['all', 'minimal', 'devops', 'claude-only', 'codex-only', 'work', 'homelab', 'proxmox-host']);
   });
   it('accepts a minimal component literal', () => {
     const c: Component = {

@@ -29,6 +29,18 @@ describe('runInstall / runUpdate', () => {
     expect(await runUpdate(ctx, { installerVersion: '0.1.0', selfUpdateFn: async () => { selfUpdated = true; return { updated: false, message: 'current' }; } })).toBe(0);
     expect(selfUpdated).toBe(true); expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds).toEqual(['a']);
   });
+  it('warns loudly, without blocking, when installing on a Proxmox host or as root (Finding 14)', async () => {
+    clearProviders(); registerProvider(fake([]));
+    const pve = makeTestCtx({ manifest, host: { isProxmoxHost: true, isRoot: true } });
+    expect(await runInstall(pve, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0);
+    expect(pve.log.lines.some((l) => /WARN/.test(l) && /Proxmox hypervisor as root/.test(l) && /management VM/.test(l))).toBe(true);
+    const root = makeTestCtx({ manifest, host: { isRoot: true } });
+    await runInstall(root, { profile: 'minimal', installerVersion: '0.1.0' });
+    expect(root.log.lines.some((l) => /WARN/.test(l) && /as root/.test(l))).toBe(true);
+    const user = makeTestCtx({ manifest });
+    await runInstall(user, { profile: 'minimal', installerVersion: '0.1.0' });
+    expect(user.log.lines.some((l) => /WARN/.test(l) && /root|Proxmox/.test(l))).toBe(false);
+  });
   it('bails on NixOS with exit 4', async () => { clearProviders(); registerProvider(fake([])); const ctx = makeTestCtx({ manifest, host: { isNixOS: true } }); expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' })).toBe(4); });
   it('update skips self-update under dry-run', async () => {
     clearProviders(); registerProvider(fake([]));
