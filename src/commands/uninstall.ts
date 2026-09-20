@@ -1,9 +1,9 @@
 import * as p from '@clack/prompts';
-import type { Ctx } from '../types.js';
+import type { Channel, Ctx } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
 import { executePlan } from '../executor.js';
-import { readState, writeState, buildState } from '../state/state.js';
+import { readState, writeState, buildState, resolveChannel } from '../state/state.js';
 import { renderPlan, renderSummary } from './summary.js';
 import { removePersistedSecrets } from '../secrets/persist.js';
 /**
@@ -15,8 +15,9 @@ import { removePersistedSecrets } from '../secrets/persist.js';
  * them, including the whole desktop. Two guards now stand in the way: provenance (`byUs`), and the refusal to treat
  * a bare `uninstall --yes` as "remove everything".
  */
-export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { json?: boolean; installerVersion: string; force?: boolean; all?: boolean }): Promise<number> {
+export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { json?: boolean; installerVersion: string; force?: boolean; all?: boolean; channel?: Channel }): Promise<number> {
   const state = await readState(ctx.paths.stateFile);
+  ctx.channel = resolveChannel(o.channel, state, state && state.profile !== 'saved' ? ctx.manifest.profiles[state.profile] : undefined); // the brew cask name depends on it
   // Ours only when the record proves it. No record at all (no state file, a v0.2 state, an id that was never
   // selected) is UNKNOWN provenance and is treated as foreign: the provider would still detect the host's own copy
   // and remove it, which is exactly the 2026-09-19 incident again. The refusal is decided after planning, from the
@@ -62,5 +63,5 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   const next = buildState(state, { ...sel, components: ctx.manifest.components.filter((c) => remaining.includes(c.id)) }, result.records, plan.detections, o.installerVersion, ctx.channel);
   for (const id of removedIds) delete next.installed[id];
   await writeState(ctx.paths.stateFile, next);
-  return result.failed ? 1 : 0;
+  return result.failed ? 1 : result.blocked ? 2 : 0;
 }

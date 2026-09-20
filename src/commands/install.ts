@@ -1,14 +1,15 @@
-import type { Component, Ctx, ProfileName } from '../types.js';
+import type { Channel, Component, Ctx, ProfileName } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
 import { executeGrouped } from '../executor.js';
-import { readState, writeState, buildState } from '../state/state.js';
+import { readState, writeState, buildState, resolveChannel } from '../state/state.js';
 import { renderPlan, renderSummary, promptSecrets, postInstallHints } from './summary.js';
 import { ensureAuth, isHeadless } from '../auth/agents.js';
 import { probeVersion } from '../detect/tools.js';
 import { persistSecrets } from '../secrets/persist.js';
 import { persistToolPath } from '../exec/persist-path.js';
-export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean; noPersistSecrets?: boolean }
+/** `channel` is the explicit `--channel` flag only; unset means "use the saved or profile channel" (see `resolveChannel`). */
+export interface InstallOpts { profile?: ProfileName; only?: string[]; skip?: string[]; fromState?: boolean; picked?: string[]; json?: boolean; installerVersion: string; noLogin?: boolean; noPersistSecrets?: boolean; channel?: Channel }
 const NIX_SNIPPET = `NixOS detected. Use home-manager instead:\n  programs.claude-code.enable = true;\n  programs.codex.enable = true;\nSee https://home-manager-options.extranix.com/?query=claude-code`;
 /** Agents this run actually needs signed in: the agent-target excludes the other agent on at least one
  * selected component, AND either the agent's own component is in the selection (it will exist by the
@@ -26,6 +27,8 @@ async function agentsToSignIn(ctx: Ctx, components: Component[]): Promise<Array<
 export async function runInstall(ctx: Ctx, o: InstallOpts): Promise<number> {
   if (ctx.host.isNixOS) { console.error(NIX_SNIPPET); return 4; }
   const state = await readState(ctx.paths.stateFile);
+  const profileName = o.profile ?? state?.profile;
+  ctx.channel = resolveChannel(o.channel, state, profileName && profileName !== 'saved' ? ctx.manifest.profiles[profileName] : undefined);
   const sel = o.picked ? resolveSelection(ctx.manifest, ctx.host, { profile: o.profile ?? state?.profile ?? 'all', picked: o.picked }) : o.fromState && state ? resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: state.selectedIds, skip: o.skip }) : resolveSelection(ctx.manifest, ctx.host, { profile: o.profile ?? 'all', only: o.only, skip: o.skip });
   if (ctx.host.diskFreeMb !== null && ctx.host.diskFreeMb < 2000) ctx.log.warn(`only ${ctx.host.diskFreeMb} MB free in home; plugin caches can need 1.5 GB`);
   if (ctx.host.claudeRunning) ctx.log.warn('a claude session is running; agent updates will be skipped and plugin changes need a restart');

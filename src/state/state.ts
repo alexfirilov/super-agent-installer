@@ -1,4 +1,4 @@
-import type { Channel, HostState, Installed, Selection, StepRecord } from '../types.js';
+import type { Channel, HostState, Installed, Profile, Selection, StepRecord } from '../types.js';
 import { readJsonFile, writeJsonAtomic, JsonParseError } from '../config/json.js';
 /** A corrupt state file aborts the run rather than reading as "first run": starting over would drop every
  * provenance record, and a later `install` would re-record the host's software as ours. */
@@ -28,4 +28,12 @@ export function buildState(prev: HostState | null, sel: Selection, records: Step
   const selected = sel.components.map((c) => c.id);
   const selectedIds = opts.mergeSelected ? [...new Set([...(prev?.selectedIds ?? []), ...selected])] : selected;
   return { version: 1, installerVersion, profile: opts.mergeSelected ? prev?.profile ?? sel.profile : sel.profile, selectedIds, channel, installed, lastRun: now };
+}
+/**
+ * Which release channel this run uses. An explicit `--channel` wins; otherwise the channel saved by the last run on
+ * this host, so `install --channel stable` is not undone by the next bare `update`; otherwise the profile's; otherwise
+ * `latest`. The CLI keeps "no flag given" distinct from "latest" precisely so that the saved value can apply.
+ */
+export function resolveChannel(explicit: Channel | undefined, state: HostState | null, profile: Profile | undefined): Channel {
+  return explicit ?? state?.channel ?? profile?.channel ?? 'latest';
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
+import { spawn } from 'node:child_process';
 import type { Channel, ProfileName } from './types.js';
 import { PROFILE_NAMES } from './types.js';
 import { VERSION } from './version.js';
@@ -31,6 +32,15 @@ export function parseCli(argv: string[]): CliArgs {
   const list = (s?: string) => (s ? s.split(',').map((x) => x.trim()).filter(Boolean) : undefined);
   return { command, profile: values.profile as ProfileName | undefined, only: list(values.only), skip: list(values.skip), yes: values.yes, dryRun: values['dry-run'], json: values.json, noAudit: values['no-audit'], noSelfUpdate: values['no-self-update'], noLogin: values['no-login'], noPersistSecrets: values['no-persist-secrets'], fromState: values['from-state'], channel: values.channel as Channel | undefined, verbose: values.verbose, manifest: values.manifest, logFile: values['log-file'], elevate: values.elevate, force: values.force, all: values.all, ids, error };
 }
+/** Runs the (freshly replaced) executable with the same arguments plus `extra`, sharing this terminal, and resolves
+ * to its exit code. Used by `update` after a self-update so the new binary finishes the run with its own manifest. */
+function reexecSelf(argv: string[]): (extra: string[]) => Promise<number> {
+  return (extra) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [...argv, ...extra], { stdio: 'inherit' });
+    child.on('error', () => resolve(1));
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+}
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   let a: CliArgs; try { a = parseCli(argv); } catch (e) { console.error((e as Error).message); console.error(HELP); return 1; }
   if (a.command === 'help') { if (a.error) console.error(a.error); console.log(HELP); return a.error ? 1 : 0; }
@@ -42,12 +52,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     case 'install': {
       const interactive = tty && !a.yes && !a.only && !a.profile && !a.fromState;
       if (!tty && !a.yes) { console.error('Unable to run interactively. Run with --yes [--profile <name>]'); return 3; }
-      if (interactive) { const state = await readState(ctx.paths.stateFile); const pick = await runPicker(ctx, { state }); if (!pick) { console.log('cancelled'); return 0; } ctx.yes = false; return runInstall(ctx, { picked: pick.picked, profile: pick.profile === 'saved' ? undefined : pick.profile, json: a.json, installerVersion: VERSION, noLogin: a.noLogin, noPersistSecrets: a.noPersistSecrets }); }
-      return runInstall(ctx, { profile: a.profile, only: a.only, skip: a.skip, fromState: a.fromState, json: a.json, installerVersion: VERSION, noLogin: a.noLogin, noPersistSecrets: a.noPersistSecrets });
+      if (interactive) { const state = await readState(ctx.paths.stateFile); const pick = await runPicker(ctx, { state }); if (!pick) { console.log('cancelled'); return 0; } ctx.yes = false; return runInstall(ctx, { picked: pick.picked, profile: pick.profile === 'saved' ? undefined : pick.profile, json: a.json, installerVersion: VERSION, noLogin: a.noLogin, noPersistSecrets: a.noPersistSecrets, channel: a.channel }); }
+      return runInstall(ctx, { profile: a.profile, only: a.only, skip: a.skip, fromState: a.fromState, json: a.json, installerVersion: VERSION, noLogin: a.noLogin, noPersistSecrets: a.noPersistSecrets, channel: a.channel });
     }
-    case 'update': return runUpdate(ctx, { json: a.json, installerVersion: VERSION, noSelfUpdate: a.noSelfUpdate, selfUpdateFn: selfUpdate });
-    case 'check': return runCheck(ctx, { json: a.json });
-    case 'uninstall': if (!tty && !a.yes) { console.error('Unable to run interactively. Run with --yes'); return 3; } return runUninstall(ctx, a.ids, { json: a.json, installerVersion: VERSION, force: a.force, all: a.all });
+    case 'update': return runUpdate(ctx, { json: a.json, installerVersion: VERSION, noSelfUpdate: a.noSelfUpdate, selfUpdateFn: selfUpdate, reexec: reexecSelf(argv), channel: a.channel });
+    case 'check': return runCheck(ctx, { json: a.json, channel: a.channel });
+    case 'uninstall': if (!tty && !a.yes) { console.error('Unable to run interactively. Run with --yes'); return 3; } return runUninstall(ctx, a.ids, { json: a.json, installerVersion: VERSION, force: a.force, all: a.all, channel: a.channel });
     case 'list': return runList(ctx);
     case 'doctor': return runDoctor(ctx);
     case 'self-update': { const r = await selfUpdate(ctx, VERSION); console.log(r.message); return r.ok ? 0 : 1; }

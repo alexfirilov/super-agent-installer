@@ -1,10 +1,11 @@
-import type { Ctx } from '../types.js';
+import type { Channel, Ctx } from '../types.js';
 import { resolveSelection } from '../manifest/resolve.js';
-import { readState } from '../state/state.js';
+import { readState, resolveChannel } from '../state/state.js';
 import { driftReport } from '../update/drift.js';
 import { table } from '../ui/log.js';
-export async function runCheck(ctx: Ctx, opts: { json?: boolean }): Promise<number> {
+export async function runCheck(ctx: Ctx, opts: { json?: boolean; channel?: Channel }): Promise<number> {
   const state = await readState(ctx.paths.stateFile);
+  ctx.channel = resolveChannel(opts.channel, state, state && state.profile !== 'saved' ? ctx.manifest.profiles[state.profile] : undefined); // Claude's "latest" differs per channel
   const sel = state ? resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: state.selectedIds }) : resolveSelection(ctx.manifest, ctx.host, { profile: 'all' });
   const rows = await driftReport(ctx, sel.components);
   if (opts.json) console.log(JSON.stringify({ profile: sel.profile, rows }, null, 2));
