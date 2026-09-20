@@ -10,7 +10,7 @@ export async function executePlan(plan: Plan, ctx: Ctx, opts: ExecOpts = {}): Pr
   for (const a of plan.actions) {
     ctx.log.step(`${a.op.padEnd(9)} ${a.description}`);
     let rec: StepRecord;
-    try { const r = await a.run(ctx); rec = { componentId: a.componentId, op: a.op, ok: r.ok, changed: r.changed, message: r.message, ...(r.blocked ? { blocked: true } : {}), from: a.from ?? null, to: a.to ?? null }; }
+    try { const r = await a.run(ctx); rec = { componentId: a.componentId, op: a.op, ok: r.ok, changed: r.changed, message: r.message, ...(r.blocked ? { blocked: true } : {}), ...(r.previous !== undefined ? { previous: r.previous } : {}), from: a.from ?? null, to: a.to ?? null }; }
     catch (e) { rec = { componentId: a.componentId, op: a.op, ok: false, changed: false, message: (e as Error).message, from: a.from ?? null, to: a.to ?? null }; }
     if (!rec.ok) ctx.log.error(`${a.componentId}: ${rec.message}`); else if (rec.changed) ctx.log.info(`${a.componentId}: ${rec.message}`); else ctx.log.debug(`${a.componentId}: ${rec.message}`);
     records.push(rec); opts.onStep?.(rec);

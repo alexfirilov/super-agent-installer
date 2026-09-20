@@ -60,3 +60,35 @@ describe('mcpClaudeProvider', () => {
     expect(ctx.calls.some((a) => a[1] === 'mcp' && a[2] === 'add-json')).toBe(false);
   });
 });
+
+describe('restoring a user\'s own definition (Finding 9)', () => {
+  // The user had their own `exa` entry before we ran. Install replaces it (ours converges), records what it
+  // replaced, and uninstall puts it back -- unless the user changed it after us, in which case it stays untouched.
+  const c = mcp({ name: 'exa', url: 'https://mcp.exa.ai/mcp' });
+  const theirs = { type: 'http', url: 'https://old', headers: { 'X-Mine': '1' } };
+  const ours = { type: 'http', url: 'https://mcp.exa.ai/mcp' };
+  const cmds = { 'claude mcp remove -s user exa': '', 'claude mcp add-json exa {"type":"http","url":"https://mcp.exa.ai/mcp"} -s user': '', 'claude mcp add-json exa {"type":"http","url":"https://old","headers":{"X-Mine":"1"}} -s user': '' };
+  it('reports the replaced definition as `previous` on install', async () => {
+    const ctx = ctxWith({ exa: theirs }, cmds);
+    const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.previous).toEqual(theirs);
+    const fresh = ctxWith({}, cmds);
+    expect((await (await mcpClaudeProvider.plan(c, fresh, null, 'install'))[0]!.run(fresh)).previous).toBeUndefined();
+  });
+  it('uninstall restores the recorded definition when the current one is still ours', async () => {
+    const ctx = ctxWith({ exa: ours }, cmds);
+    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
+    const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.message).toMatch(/restored/);
+    expect(ctx.calls).toContainEqual(['claude', 'mcp', 'remove', '-s', 'user', 'exa']);
+    expect(ctx.calls).toContainEqual(['claude', 'mcp', 'add-json', 'exa', JSON.stringify(theirs), '-s', 'user']);
+  });
+  it('uninstall leaves a definition the user edited after us, and says so', async () => {
+    const edited = { type: 'http', url: 'https://mcp.exa.ai/mcp', headers: { 'X-Added-Later': '1' } };
+    const ctx = ctxWith({ exa: edited }, cmds);
+    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
+    const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.changed).toBe(false); expect(r.message).toMatch(/left|kept|modified/i);
+    expect(ctx.calls.some((a) => a.join(' ').startsWith('claude mcp remove'))).toBe(false);
+  });
+});

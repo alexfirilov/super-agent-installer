@@ -8,6 +8,11 @@ import type { Component, Provider, Selection } from '../src/types.js';
 const c = (id: string, kind: Component['kind'], spec: Component['spec']): Component => ({ id, name: id, kind, agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: true, spec });
 const sel = (components: Component[]): Selection => ({ profile: 'all', components, excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 });
 describe('executePlan', () => {
+  it('carries an action\'s `previous` into its step record', async () => {
+    const plan = { actions: [action('m', 'configure', 'replace', async () => ({ ok: true, changed: true, message: 'replaced', previous: { url: 'https://theirs' } }))], detections: {} };
+    const r = await executePlan(plan, makeTestCtx());
+    expect(r.records[0]).toMatchObject({ componentId: 'm', previous: { url: 'https://theirs' } });
+  });
   it('runs all actions, records failures and thrown errors, keeps going', async () => {
     const ctx = makeTestCtx(); const seen: string[] = [];
     const plan = { detections: {}, actions: [

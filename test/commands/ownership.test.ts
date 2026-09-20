@@ -104,3 +104,23 @@ describe('uninstall ownership: created vs adopted', () => {
     expect(present).toEqual(new Set(['a', 'b']));
   });
 });
+
+describe('restore wiring through the commands (Finding 9)', () => {
+  it('a value replaced at install is recorded in state and handed back to the provider at uninstall', async () => {
+    let current: string | null = 'theirs'; const seenPrevious: unknown[] = [];
+    clearProviders(); registerProvider({
+      kind: 'tool',
+      detect: async () => (current ? { version: null, details: { v: current } } : null),
+      plan: async (c, ctx, installed, mode) => {
+        if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', 'remove', async () => { seenPrevious.push(ctx.state?.installed[c.id]?.previous); current = null; return { ok: true, changed: true, message: 'removed' }; })] : [];
+        if (installed?.details?.v === 'ours') return [];
+        return [action(c.id, 'configure', 'replace', async () => { const was = current; current = 'ours'; return { ok: true, changed: true, message: 'replaced', ...(was ? { previous: { v: was } } : {}) }; })];
+      },
+    });
+    const ctx = makeTestCtx({ manifest }); ctx.yes = true;
+    expect(await runInstall(ctx, { profile: 'all', only: ['a'], installerVersion: '0.4.0' })).toBe(0);
+    expect(state(ctx).installed.a).toMatchObject({ byUs: true, previous: { v: 'theirs' } });
+    expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(0);
+    expect(seenPrevious).toEqual([{ v: 'theirs' }]);
+  });
+});

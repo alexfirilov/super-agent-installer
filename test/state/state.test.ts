@@ -20,3 +20,16 @@ describe('state', () => {
     await expect(readState(p)).rejects.toThrow(/state\.json.*not valid JSON/s);
   });
 });
+describe('previous values (Finding 9)', () => {
+  const sel = { profile: 'all', components: [{ id: 'm' }], excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 } as unknown as Selection;
+  it('records what a configure replaced, keeps it across re-applies that replace nothing, and drops it on uninstall', () => {
+    const first = buildState(null, sel, [{ componentId: 'm', op: 'configure', ok: true, changed: true, message: '', previous: { url: 'https://theirs' } }], {}, '0.4.0', 'latest');
+    expect(first.installed.m).toMatchObject({ byUs: true, previous: { url: 'https://theirs' } });
+    const again = buildState(first, sel, [{ componentId: 'm', op: 'configure', ok: true, changed: true, message: '' }], {}, '0.4.0', 'latest');
+    expect(again.installed.m?.previous).toEqual({ url: 'https://theirs' });
+    const edited = buildState(again, sel, [{ componentId: 'm', op: 'configure', ok: true, changed: true, message: '', previous: { url: 'https://edited-later' } }], {}, '0.4.0', 'latest');
+    expect(edited.installed.m?.previous).toEqual({ url: 'https://edited-later' }); // the most recent foreign value we replaced
+    const gone = buildState(edited, sel, [{ componentId: 'm', op: 'uninstall', ok: true, changed: true, message: '' }], {}, '0.4.0', 'latest');
+    expect(gone.installed.m).toBeUndefined();
+  });
+});

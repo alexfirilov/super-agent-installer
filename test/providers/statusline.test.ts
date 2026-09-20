@@ -34,3 +34,22 @@ describe('statuslineProvider', () => {
     expect(r.message).toMatch(/\/claude-hud:setup/); expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({});
   });
 });
+
+describe('restoring the user\'s own statusLine (Finding 9)', () => {
+  const theirs = { type: 'command', command: 'my-own-statusline.sh' };
+  it('install reports the statusLine it replaced, uninstall puts it back', async () => {
+    const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true }); writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ statusLine: theirs, model: 'opus' }));
+    const r = await (await statuslineProvider.plan(sl('caveman'), ctx, null, 'install'))[0]!.run(ctx);
+    expect(r.previous).toEqual(theirs);
+    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['sl-caveman'], channel: 'latest', lastRun: 't', installed: { 'sl-caveman': { version: null, at: 't', byUs: true, previous: theirs } } };
+    const u = await (await statuslineProvider.plan(sl('caveman'), ctx, await statuslineProvider.detect(sl('caveman'), ctx), 'uninstall'))[0]!.run(ctx);
+    expect(u.ok).toBe(true); expect(u.message).toMatch(/restored/);
+    expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({ statusLine: theirs, model: 'opus' });
+  });
+  it('install over an empty settings file reports nothing, and uninstall then simply removes the entry', async () => {
+    const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true }); writeFileSync(ctx.paths.claudeSettings, '{}');
+    expect((await (await statuslineProvider.plan(sl('caveman'), ctx, null, 'install'))[0]!.run(ctx)).previous).toBeUndefined();
+    await (await statuslineProvider.plan(sl('caveman'), ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({});
+  });
+});

@@ -17,6 +17,7 @@ import { removePersistedSecrets } from '../secrets/persist.js';
  */
 export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { json?: boolean; installerVersion: string; force?: boolean; all?: boolean; channel?: Channel }): Promise<number> {
   const state = await readState(ctx.paths.stateFile);
+  ctx.state = state; // providers restore `previous` values from it
   ctx.channel = resolveChannel(o.channel, state, state && state.profile !== 'saved' ? ctx.manifest.profiles[state.profile] : undefined); // the brew cask name depends on it
   // Ours only when the record proves it. No record at all (no state file, a v0.2 state, an id that was never
   // selected) is UNKNOWN provenance and is treated as foreign: the provider would still detect the host's own copy

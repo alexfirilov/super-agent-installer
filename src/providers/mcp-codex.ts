@@ -66,7 +66,21 @@ export const mcpCodexProvider: Provider = {
   async detect(c, ctx) { if (c.spec.kind !== 'mcp') return null; const st = await getCodexState(ctx); if (!st.installed) return null; const t = st.mcp[c.spec.name]; return t ? { version: null, details: t } : null; },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getCodexState(ctx); if (!st.installed) return [skipAction(c.id, 'Codex CLI not installed', 'codex-cli')];
-    if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove MCP ${spec.name} (Codex)`, async () => { await ctx.run(['codex', 'mcp', 'remove', spec.name], { allowFailure: true }); return ok(`${spec.name} removed`); })] : [];
+    if (mode === 'uninstall') {
+      if (!installed) return [];
+      return [action(c.id, 'uninstall', `remove MCP ${spec.name} (Codex)`, async () => {
+        // same rule as the Claude side: still ours -> remove (and restore what we replaced); edited since -> leave
+        let desired: Record<string, unknown> | null = null; try { desired = desiredCodexMcp(substituteSpec(spec, ctx)); } catch { desired = null; }
+        if (desired && installed.details !== undefined && !tomlTableEquals(installed.details, desired)) return ok(`${spec.name}: left in place, it was modified after this installer wrote it`, false);
+        await ctx.run(['codex', 'mcp', 'remove', spec.name], { allowFailure: true });
+        const previous = ctx.state?.installed[c.id]?.previous;
+        if (previous && typeof previous === 'object') {
+          const r = await patchCodexTable(ctx, spec.name, previous as Record<string, unknown>);
+          return ok(r.applied ? `${spec.name} removed; your earlier table restored` : `${spec.name} removed. config.toml has comments, so your earlier table was not written back automatically; add it under [mcp_servers.${spec.name}]:\n${r.manual}`);
+        }
+        return ok(`${spec.name} removed`);
+      })];
+    }
     const op = installed ? 'configure' : 'install';
     let resolved: McpSpec;
     try { resolved = substituteSpec(spec, ctx); } catch (e) {
@@ -88,7 +102,7 @@ export const mcpCodexProvider: Provider = {
       const chk = await ctx.run(['codex', 'mcp', 'get', spec.name, '--json'], { readOnly: true, allowFailure: true }); if (chk.code !== 0 && !ctx.dryRun) return fail(`codex cannot read ${spec.name} after write: ${(chk.stderr || chk.stdout).trim()}`);
       const post = await runMcpPostInstall(spec, ctx);
       if (post) return fail(post);
-      return ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`);
+      return { ...ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`), ...(installed ? { previous: installed.details } : {}) };
     })];
   },
 };

@@ -22,7 +22,11 @@ export function buildState(prev: HostState | null, sel: Selection, records: Step
     // `changed` separates "we installed it" from "it was already correct": only the former is ours to remove later.
     // An `update` never changes provenance: upgrading the distro's git does not make git ours.
     else if (r.op === 'update') installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now, byUs: installed[r.componentId]?.byUs ?? false };
-    else if (r.op === 'install' || r.op === 'configure') installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now, byUs: r.changed || (installed[r.componentId]?.byUs ?? false) };
+    else if (r.op === 'install' || r.op === 'configure') {
+      // `previous` is the most recent foreign value we wrote over; a re-apply that replaced nothing keeps the old one
+      const previous = r.previous !== undefined ? r.previous : installed[r.componentId]?.previous;
+      installed[r.componentId] = { version: r.to ?? detections[r.componentId]?.version ?? null, at: now, byUs: r.changed || (installed[r.componentId]?.byUs ?? false), ...(previous !== undefined ? { previous } : {}) };
+    }
     else if (r.op === 'skip' && !installed[r.componentId] && detections[r.componentId]) installed[r.componentId] = { version: detections[r.componentId]?.version ?? null, at: now, byUs: false };
   }
   const selected = sel.components.map((c) => c.id);

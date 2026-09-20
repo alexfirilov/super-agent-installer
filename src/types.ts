@@ -82,6 +82,8 @@ export interface Ctx {
   elevate: boolean;
   auth?: Partial<Record<'claude' | 'codex', AuthState>>;
   secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
+  /** The host state as read at the start of the command (set by `uninstall`), so providers can restore `previous` values. */
+  state?: HostState | null;
 }
 /** `byUs` records provenance: true only when this installer actually put the component there. A component merely
  * DETECTED on the host (git that shipped with the distro) is recorded with byUs false, and uninstall must not touch
@@ -91,10 +93,14 @@ export interface Installed { version: string | null; details?: Record<string, un
 export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'configure';
 /** `blocked`: the component did nothing because an agent it needs never signed in. Reported separately from an
  * ordinary skip -- it stays in the summary table and makes the run exit non-zero (D1). */
-export interface ActionResult { ok: boolean; message: string; changed: boolean; blocked?: boolean }
+/** `previous`: a value this action replaced that was NOT ours (a user's own MCP entry or statusLine). It is recorded
+ * in state so that uninstall can put it back instead of just deleting what we wrote over it. */
+export interface ActionResult { ok: boolean; message: string; changed: boolean; blocked?: boolean; previous?: unknown }
 export interface Action { id: string; componentId: string; op: Op; description: string; from?: string | null; to?: string | null; blockedBy?: string[]; run: (ctx: Ctx) => Promise<ActionResult> }
 export type Mode = 'install' | 'update' | 'uninstall';
 export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
 export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
-export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null }
-export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, { version: string | null; at: string; byUs?: boolean }>; lastRun: string }
+export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null; previous?: unknown }
+/** `previous`: the foreign value the last configure replaced (see `ActionResult.previous`); absent when we created the entry from nothing. */
+export interface InstalledRecord { version: string | null; at: string; byUs?: boolean; previous?: unknown }
+export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, InstalledRecord>; lastRun: string }

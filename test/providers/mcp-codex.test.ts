@@ -90,3 +90,31 @@ describe('mcpCodexProvider', () => {
     await (await mcpCodexProvider.plan(loud, lctx, null, 'install'))[0]!.run(lctx); expect(lctx.log.lines.some((l) => /no bearer env var/.test(l))).toBe(true);
   });
 });
+
+describe('restoring a user\'s own table (Finding 9)', () => {
+  const c = mcp({ name: 'gh', url: 'https://api.githubcopilot.com/mcp/readonly', bearerEnv: 'GITHUB_PAT_TOKEN' });
+  const cmds = { 'codex mcp add gh --url https://api.githubcopilot.com/mcp/readonly --bearer-token-env-var GITHUB_PAT_TOKEN': '', 'codex mcp get gh --json': '{}', 'codex mcp remove gh': '' };
+  const theirs = { url: 'https://old.example/mcp', bearer_token_env_var: 'MY_TOKEN' };
+  it('reports the replaced table as `previous` on install', async () => {
+    const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://old.example/mcp"\nbearer_token_env_var = "MY_TOKEN"\n', cmds);
+    const r = await (await mcpCodexProvider.plan(c, ctx, await mcpCodexProvider.detect(c, ctx), 'install'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.previous).toEqual(theirs);
+  });
+  it('uninstall writes the recorded table back when the current one is still ours', async () => {
+    const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://api.githubcopilot.com/mcp/readonly"\nbearer_token_env_var = "GITHUB_PAT_TOKEN"\n', cmds);
+    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
+    const r = await (await mcpCodexProvider.plan(c, ctx, await mcpCodexProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.message).toMatch(/restored/);
+    expect(ctx.calls).toContainEqual(['codex', 'mcp', 'remove', 'gh']);
+    const text = readFileSync(ctx.paths.codexConfig, 'utf8');
+    expect(text).toContain('url = "https://old.example/mcp"'); expect(text).toContain('bearer_token_env_var = "MY_TOKEN"');
+  });
+  it('uninstall leaves a table the user edited after us', async () => {
+    const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://api.githubcopilot.com/mcp/readonly"\nbearer_token_env_var = "GITHUB_PAT_TOKEN"\nstartup_timeout_sec = 99\n', cmds);
+    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
+    const r = await (await mcpCodexProvider.plan(c, ctx, await mcpCodexProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.changed).toBe(false);
+    expect(ctx.calls.some((a) => a.join(' ') === 'codex mcp remove gh')).toBe(false);
+    expect(readFileSync(ctx.paths.codexConfig, 'utf8')).toContain('startup_timeout_sec = 99');
+  });
+});
