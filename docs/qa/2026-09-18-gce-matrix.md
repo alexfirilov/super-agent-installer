@@ -89,3 +89,33 @@ machine with a terminal) before running the installer. Codex is unaffected: `cod
 On a fresh Rocky 9 and a fresh Ubuntu 24.04, a clean install exits 0 and a **new login shell**
 resolves `node`, `npm`, `claude`, `codex`, `go`, `gopls`, `jq`, `rg`, `gh` and `uv`. A second run
 is a no-op that also exits 0.
+
+## Five-agent QA round (2026-09-19/20)
+
+Five read-only reviewers audited security, lifecycle, test quality, manifest data and first-run UX. One of them
+ran `uninstall --yes` against the maintainer's workstation and removed 161 packages — that accident became the
+round's most valuable finding, and the three defects behind it are fixed (provenance, bare-`--yes` refusal, apt
+collateral guard).
+
+Fixed: root-owned `/tmp` NodeSource path; OAuth token in a predictable temp file; plaintext-capable wget/PS1
+fetch; unverified ripgrep/gh release downloads; the setup-token pty gate (which had reintroduced the hang on the
+other branch); `--only` shrinking the saved selection; `update` skipping `persistToolPath`; uninstall leaving
+`secrets.env` and its rc blocks; two `codexToml` settings erasing each other; `uninstall` deleting plugins it had
+only disabled; unescaped `$HOME` in the PATH block; the `curl | bash` one-liner that could never reach the picker;
+one-sided obsidian conflict; missing `-y` on the n8n MCP.
+
+Parked, with reasons:
+
+- **Pasted secrets are in `process.env` for child processes.** Every `npx`/`npm`/`uvx` the run spawns inherits the
+  GitHub PAT and other tokens. Real, but fixing it properly means per-component environment scoping — a design
+  change, not a patch.
+- **`SHA256SUMS` is unsigned and shares an origin with the binary.** It catches corruption, not a hostile origin.
+  Fixing it needs release signing and a trusted key, which this project does not yet have.
+- **State is written only at the end of a run.** An interrupted run leaves no record. Needs incremental state
+  writes to fix honestly.
+- **`state.channel` is recorded but never read**, so an unflagged `update` can move a `--channel stable` host to
+  latest.
+- **Distro-pinned tools re-run their package manager every `update`**, and `sl-claude-hud` reconfigures every run
+  because its detection can never become true.
+- **The docker matrix still runs as root**, which is exactly why it missed the fnm/`unzip` bug. A non-root stage
+  would be the single highest-value test addition left.
