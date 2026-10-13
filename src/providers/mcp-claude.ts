@@ -1,7 +1,7 @@
 import type { Action, Component, Ctx, Installed, McpSpec, Platform, Provider } from '../types.js';
 import { getClaudeState } from './claude-plugin.js';
 import { action, ok, fail, skipAction } from './types.js';
-import { substituteSpec, secretHints, runMcpPostInstall } from './mcp-shared.js';
+import { substituteSpec, secretHints, runMcpPostInstall, withoutVersions } from './mcp-shared.js';
 export { secretHints };
 const sortKeys = (v: unknown): unknown => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sortKeys(x)])) : v);
 export function desiredClaudeMcp(spec: McpSpec, platform: Platform): Record<string, unknown> {
@@ -17,6 +17,8 @@ export const mcpClaudeProvider: Provider = {
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'mcp') return []; const spec = c.spec; const st = await getClaudeState(ctx); if (!st.installed) return [skipAction(c.id, 'Claude Code not installed', 'claude-code')];
     const remove = () => ctx.run(['claude', 'mcp', 'remove', '-s', 'user', spec.name], { allowFailure: true });
+    const stale = (spec.formerNames ?? []).filter((n) => st.mcp[n] !== undefined);
+    const removeStale = async () => { for (const n of stale) { await ctx.run(['claude', 'mcp', 'remove', '-s', 'user', n], { allowFailure: true }); delete st.mcp[n]; } };
     const same = (a: unknown, b: unknown) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
     const tryDesired = (): Record<string, unknown> | null => { try { return desiredClaudeMcp(substituteSpec(spec, ctx), ctx.host.platform); } catch { return null; } };
     if (mode === 'uninstall') {
@@ -26,8 +28,8 @@ export const mcpClaudeProvider: Provider = {
         // leave it and say so. (When the desired form cannot be computed -- a placeholder env var is unset -- the
         // comparison is skipped and the entry is treated as ours, as before.)
         const desired = tryDesired();
-        if (desired && installed.details !== undefined && !same(installed.details, desired)) return ok(`${spec.name}: left in place, it was modified after this installer wrote it`, false);
-        await remove();
+        if (desired && installed.details !== undefined && !same(withoutVersions(installed.details), withoutVersions(desired))) return ok(`${spec.name}: left in place, it was modified after this installer wrote it`, false);
+        await remove(); await removeStale();
         const previous = ctx.state?.installed[c.id]?.previous;
         if (previous !== undefined) { await ctx.run(['claude', 'mcp', 'add-json', spec.name, JSON.stringify(previous), '-s', 'user'], { timeoutMs: 120000 }); return ok(`${spec.name} removed; your earlier definition restored`); }
         return ok(`${spec.name} removed`);
@@ -37,14 +39,15 @@ export const mcpClaudeProvider: Provider = {
     let resolved: McpSpec;
     try { resolved = substituteSpec(spec, ctx); } catch (e) { return [action(c.id, op, `${op} MCP ${spec.name} (Claude, user scope)`, async () => fail((e as Error).message))]; }
     const desired = desiredClaudeMcp(resolved, ctx.host.platform);
-    if (installed && same(installed.details, desired)) return [];
+    if (installed && same(installed.details, desired) && !stale.length) return [];
     return [action(c.id, op, `${op} MCP ${spec.name} (Claude, user scope)`, async () => {
       for (const v of spec.secretEnv ?? []) if (!ctx.env[v] && !ctx.secrets.has(v)) ctx.log.warn(`${spec.name}: ${v} is not set; the server will not authenticate until you export it`);
-      await remove(); await ctx.run(['claude', 'mcp', 'add-json', spec.name, JSON.stringify(desired), '-s', 'user'], { timeoutMs: 120000 });
+      await remove(); await removeStale(); await ctx.run(['claude', 'mcp', 'add-json', spec.name, JSON.stringify(desired), '-s', 'user'], { timeoutMs: 120000 });
       const post = await runMcpPostInstall(spec, ctx);
       if (post) return fail(post);
-      // an entry that was there and differed is the user's own: remember it so uninstall can put it back
-      return { ...ok(`${spec.name} configured for Claude.${secretHints(c, ctx)}`), ...(installed ? { previous: installed.details } : {}) };
+      // an entry that was there and differed is the user's own -- unless this installer configured the component
+      // before, in which case it is our earlier write (an older launch version) and uninstall must not restore it
+      return { ...ok(`${spec.name} configured for Claude${stale.length ? ` (removed stale ${stale.join(', ')})` : ''}.${secretHints(c, ctx)}`), ...(installed && !ctx.state?.installed[c.id] ? { previous: installed.details } : {}) };
     })];
   },
 };

@@ -92,3 +92,36 @@ describe('restoring a user\'s own definition (Finding 9)', () => {
     expect(ctx.calls.some((a) => a.join(' ').startsWith('claude mcp remove'))).toBe(false);
   });
 });
+
+describe('registry version bumps', () => {
+  const st = (installed: Record<string, unknown>) => ({ version: 1 as const, installerVersion: '0.4.0', profile: 'all' as const, selectedIds: ['mcp-n8n-mcp'], channel: 'latest' as const, lastRun: 't', installed: installed as never });
+  const launch = (v: string) => ({ type: 'stdio', command: 'npx', args: ['-y', `n8n-mcp@${v}`] });
+  const c = mcp({ name: 'n8n-mcp', transport: 'stdio', command: 'npx', args: ['-y', 'n8n-mcp@2.92.1'], formerNames: ['n8n-mcp@2.87.0'] });
+  it('rewriting our own older launch line is not a user value to restore later', async () => {
+    const ctx = ctxWith({ 'n8n-mcp': launch('2.87.0') });
+    ctx.state = st({ 'mcp-n8n-mcp': { version: null, at: 't', byUs: true, versions: { version: '2.87.0' } } });
+    const acts = await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'install');
+    expect(acts[0]).toMatchObject({ op: 'configure' });
+    const r = await acts[0]!.run(ctx); expect(r.ok).toBe(true); expect(r.previous).toBeUndefined();
+  });
+  it('an entry under a former name (v0.4.0 put the version in the name) is removed, on its own too', async () => {
+    const ctx = ctxWith({ 'n8n-mcp@2.87.0': launch('2.87.0'), 'n8n-mcp': launch('2.92.1') });
+    const acts = await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'install');
+    expect(acts).toHaveLength(1); const r = await acts[0]!.run(ctx);
+    expect(r.ok).toBe(true); expect(r.message).toMatch(/removed stale n8n-mcp@2\.87\.0/);
+    expect(ctx.calls).toContainEqual(['claude', 'mcp', 'remove', '-s', 'user', 'n8n-mcp@2.87.0']);
+    const clean = ctxWith({ 'n8n-mcp': launch('2.92.1') });
+    expect(await mcpClaudeProvider.plan(c, clean, await mcpClaudeProvider.detect(c, clean), 'install')).toEqual([]);
+  });
+});
+
+describe('uninstall after a version move', () => {
+  it('an entry that differs from ours only by package version is still ours and is removed', async () => {
+    const c = mcp({ name: 'k8s', transport: 'stdio', command: 'npx', args: ['-y', 'kubernetes-mcp-server@0.0.70', '--read-only'] });
+    const ctx = ctxWith({ k8s: { type: 'stdio', command: 'npx', args: ['-y', 'kubernetes-mcp-server@0.0.67', '--read-only'] } });
+    const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
+    expect(r.message).toBe('k8s removed'); expect(ctx.calls).toContainEqual(['claude', 'mcp', 'remove', '-s', 'user', 'k8s']);
+    const edited = ctxWith({ k8s: { type: 'stdio', command: 'npx', args: ['-y', 'kubernetes-mcp-server@0.0.67'] } });
+    expect((await (await mcpClaudeProvider.plan(c, edited, await mcpClaudeProvider.detect(c, edited), 'uninstall'))[0]!.run(edited)).message).toMatch(/left in place/);
+  });
+});

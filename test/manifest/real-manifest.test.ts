@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseManifest } from '../../src/manifest/schema.js';
 import { resolveSelection, slotConflicts } from '../../src/manifest/resolve.js';
-import type { HostInfo } from '../../src/types.js';
+import type { Component, HostInfo } from '../../src/types.js';
+import { fillVersions } from '../../src/version/resolve.js';
 const m = parseManifest(JSON.parse(readFileSync(new URL('../../manifest.json', import.meta.url), 'utf8')));
 const host = (platform: HostInfo['platform']) => ({ platform } as HostInfo);
 describe('manifest.json', () => {
@@ -61,7 +62,8 @@ describe('manifest.json', () => {
     const c = m.components.find((x) => x.id === 'sk-agent-browser')!;
     expect(c.postInstallHint).toBeUndefined();
     expect(c.spec.kind).toBe('skill');
-    expect((c.spec as { postInstall?: string[][] }).postInstall).toEqual([['npm', 'install', '-g', 'agent-browser@0.38.1'], ['agent-browser', 'install']]);
+    expect((c.spec as { postInstall?: string[][] }).postInstall).toEqual([['npm', 'install', '-g', 'agent-browser@{{version}}'], ['agent-browser', 'install']]);
+    expect(c.versions?.version).toMatchObject({ registry: 'npm', package: 'agent-browser' });
   });
   it('every skill component has audit entries (also skills: "*" ones)', () => {
     for (const c of m.components) if (c.spec.kind === 'skill') { expect(c.audit?.length, c.id).toBeGreaterThan(0); for (const a of c.audit ?? []) expect(`${a.owner}/${a.repo}`, c.id).toBe(c.spec.repo.replace(/^https:\/\/github\.com\//, '')); }
@@ -107,19 +109,22 @@ describe('npx-based MCP servers', () => {
   });
 });
 
-describe('pinned component versions (Finding 8)', () => {
-  // A given installer release installs a known set of versions. Anything the agents launch or we install through
-  // a package registry carries an explicit version; `update` moves to the pin, and a new release moves the pin.
+describe('registry versions (Finding 8, then resolved at run time)', () => {
+  // Every package installed or launched through a registry names an exact version once its `{{key}}` placeholders
+  // are filled: the stable channel fills them with the catalog pins, the latest channel with what the registry has
+  // (never below the pin). Either way the agents never launch a floating `@latest`.
   const PIN = /@\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.]+)?$|==\d+\.\d+\.\d+$/;
+  const pinned = (c: Component): Component => ({ ...c, spec: fillVersions(c.spec, Object.fromEntries(Object.entries(c.versions ?? {}).map(([k, v]) => [k, v.pin]))) });
+  const filled = m.components.map(pinned);
   it('every npm-installed tool and go tool names a version', () => {
-    for (const c of m.components) {
+    for (const c of filled) {
       if (c.spec.kind !== 'tool') continue;
       for (const pkg of (c.spec.packages.npm ?? '').split(/\s+/).filter(Boolean)) expect(pkg, `${c.id}: npm package ${pkg} is not pinned`).toMatch(PIN);
       if (c.spec.packages.go) expect(c.spec.packages.go, `${c.id}: go package is not pinned`).toMatch(/@v\d+\.\d+\.\d+$/);
     }
   });
   it('every npx/uvx-launched MCP server names a version (no @latest)', () => {
-    for (const c of m.components) {
+    for (const c of filled) {
       if (c.spec.kind !== 'mcp' || !c.spec.command) continue;
       if (!['npx', 'uvx'].includes(c.spec.command)) continue;
       const pkg = (c.spec.args ?? []).find((a) => !a.startsWith('-'));
@@ -129,9 +134,36 @@ describe('pinned component versions (Finding 8)', () => {
     }
   });
   it('skill postInstall npm installs name a version', () => {
-    for (const c of m.components) {
+    for (const c of filled) {
       if (c.spec.kind !== 'skill') continue;
       for (const cmd of c.spec.postInstall ?? []) if (cmd[0] === 'npm' && cmd[1] === 'install') for (const pkg of cmd.slice(2).filter((a) => !a.startsWith('-'))) expect(pkg, `${c.id}: ${pkg} is not pinned`).toMatch(PIN);
     }
+  });
+  it('registry versions are placeholders, not literals, so the latest channel can move them', () => {
+    for (const c of m.components) {
+      if (c.spec.kind === 'tool') for (const pkg of [...(c.spec.packages.npm ?? '').split(/\s+/), c.spec.packages.go ?? ''].filter(Boolean)) expect(pkg, c.id).toMatch(/\{\{[a-z-]+\}\}$/);
+      if (c.spec.kind === 'mcp' && ['npx', 'uvx'].includes(c.spec.command ?? '')) expect((c.spec.args ?? []).find((a) => !a.startsWith('-')), c.id).toMatch(/\{\{[a-z-]+\}\}$/);
+    }
+  });
+  it('a major-version hold names the major its pin is on', () => {
+    for (const c of m.components) for (const [k, v] of Object.entries(c.versions ?? {})) if (v.major !== undefined) expect(Number(v.pin.split('.')[0]), `${c.id}.${k}`).toBe(v.major);
+  });
+  it('the caveman CLI stays on 1.x until the hook provider is verified against 2.x', () => {
+    expect(m.components.find((c) => c.id === 'caveman-cli')!.versions?.version?.major).toBe(1);
+  });
+});
+
+describe('MCP server names', () => {
+  it('never carry a version: a name is the identity agents and permission rules key on, and a bump must not orphan the old entry', () => {
+    // v0.4.0's pinning pass rewrote mcp-n8n-claude's name to `n8n-mcp@2.87.0` along with its args
+    for (const c of m.components) if (c.spec.kind === 'mcp') expect(c.spec.name, c.id).toMatch(/^[a-z0-9][a-z0-9_-]*$/i);
+    const n8n = m.components.find((c) => c.id === 'mcp-n8n-claude')!.spec as { name: string; formerNames?: string[] };
+    expect(n8n.name).toBe('n8n-mcp'); expect(n8n.formerNames).toContain('n8n-mcp@2.87.0');
+  });
+});
+
+describe('channels', () => {
+  it('only the proxmox-host profile defaults to the stable channel', () => {
+    expect(Object.entries(m.profiles).filter(([, p]) => p?.channel === 'stable').map(([n]) => n)).toEqual(['proxmox-host']);
   });
 });

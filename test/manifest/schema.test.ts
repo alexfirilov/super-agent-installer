@@ -24,3 +24,16 @@ describe('parseManifest', () => {
     expect(() => parseManifest({ ...base, components: [mcp] })).toThrow(/agents/);
   });
 });
+
+describe('version placeholders', () => {
+  const tool = (npm: string, versions?: unknown) => ({ id: 'tl', name: 'tl', kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: false, spec: { kind: 'tool', probe: ['tl'], packages: { npm } }, ...(versions ? { versions } : {}) });
+  const issues = (c: unknown) => { try { parseManifest({ ...base, components: [c] }); return []; } catch (e) { return (e as ManifestError).issues; } };
+  it('accepts a placeholder with a matching versions entry', () => {
+    expect(issues(tool('tl@{{version}}', { version: { registry: 'npm', package: 'tl', pin: '1.2.3', major: 1 } }))).toEqual([]);
+  });
+  it('rejects a placeholder without an entry, an entry nothing uses, and a pin that is not exact', () => {
+    expect(issues(tool('tl@{{version}}'))).toEqual(['tl: {{version}} has no entry in versions']);
+    expect(issues(tool('tl@1.0.0', { version: { registry: 'npm', package: 'tl', pin: '1.0.0' } }))).toEqual(['tl: versions.version is never used in the spec']);
+    expect(issues(tool('tl@{{version}}', { version: { registry: 'npm', package: 'tl', pin: '^1.0.0' } })).join()).toMatch(/exact x\.y\.z/);
+  });
+});

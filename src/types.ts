@@ -22,6 +22,8 @@ export interface McpSpec {
   /** Commands to run after the server is configured, like `SkillSpec.postInstall` -- e.g. `claude mcp login <name>`
    * for a server whose auth is a browser OAuth flow. Run with inherited stdio, so the user can complete it there. */
   postInstall?: string[][];
+  /** Names this server was registered under by earlier releases; configuring it removes those stale entries. */
+  formerNames?: string[];
 }
 export interface ToolPackages {
   apt?: string; dnf?: string; apk?: string; pacman?: string; zypper?: string; brew?: string; winget?: string; scoop?: string; choco?: string;
@@ -34,6 +36,11 @@ export interface StatuslineSpec { kind: 'statusline'; provider: 'caveman' | 'cla
 export interface InstructionsSpec { kind: 'instructions'; source: string }
 export type Spec = AgentSpec | ClaudePluginSpec | CodexPluginSpec | SkillSpec | McpSpec | ToolSpec | SettingSpec | HookSpec | StatuslineSpec | InstructionsSpec;
 
+/** One registry package whose version is chosen at run time. Spec strings refer to it as `{{key}}` (the key in
+ * `Component.versions`). `pin` is the catalog's known-good version: the `stable` channel installs exactly it, and on
+ * `latest` it is the floor the resolved version never goes below (and the fallback when the registry is unreachable).
+ * `major` holds the component on one major version until the installer is known to work with the next. */
+export interface VersionSource { registry: 'npm' | 'pypi' | 'go'; package: string; pin: string; major?: number }
 export interface Component {
   id: string; name: string; kind: Kind; agents: AgentTarget; platforms: Platform[]; description: string; verdict: Verdict;
   defaultSelected: boolean; forceOffInAll?: boolean; profiles?: Partial<Record<ProfileName, boolean>>;
@@ -43,10 +50,12 @@ export interface Component {
   secrets?: Array<{ env: string; prompt: string; required: boolean }>;
   audit?: Array<{ owner: string; repo: string; skill: string }>;
   postInstallHint?: string; source?: string; spec: Spec;
+  versions?: Record<string, VersionSource>;
 }
 /** `channel`: the release channel a profile installs on when neither `--channel` nor a saved state names one (see `resolveChannel`). */
 export interface Profile { description: string; base: 'all' | 'none'; include?: string[]; exclude?: string[]; agentFilter?: 'claude' | 'codex'; channel?: Channel }
-export interface Manifest { version: 1; profiles: Partial<Record<ProfileName, Profile>>; components: Component[] }
+/** `minInstallerVersion`: the oldest installer that understands this catalog; an older one falls back to its bundled copy. */
+export interface Manifest { version: 1; minInstallerVersion?: string; profiles: Partial<Record<ProfileName, Profile>>; components: Component[] }
 
 export type PkgManager = 'apt' | 'dnf' | 'yum' | 'pacman' | 'zypper' | 'apk' | 'brew' | 'winget' | 'scoop' | 'choco' | 'nix' | null;
 export interface HostInfo {
@@ -82,8 +91,15 @@ export interface Ctx {
   elevate: boolean;
   auth?: Partial<Record<'claude' | 'codex', AuthState>>;
   secretsPersist?: { persisted: string[]; failed: Array<{ name: string; reason: string }> };
-  /** The host state as read at the start of the command (set by `uninstall`), so providers can restore `previous` values. */
+  /** The host state as read at the start of the command, so providers can tell their own earlier writes from the
+   * user's and restore `previous` values. */
   state?: HostState | null;
+  /** `latest` channel only: a registry version must be at least this many days old to be installed (0 = newest). */
+  cooldownDays: number;
+  /** `--offline`: no catalog fetch and no registry lookups; versions come from the catalog pins. */
+  offline?: boolean;
+  /** Where `manifest` came from, for the run header: the published catalog URL, the local cache, a path, or the bundled copy. */
+  catalogSource?: string;
 }
 /** `byUs` records provenance: true only when this installer actually put the component there. A component merely
  * DETECTED on the host (git that shipped with the distro) is recorded with byUs false, and uninstall must not touch
@@ -102,5 +118,6 @@ export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<
 export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
 export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null; previous?: unknown }
 /** `previous`: the foreign value the last configure replaced (see `ActionResult.previous`); absent when we created the entry from nothing. */
-export interface InstalledRecord { version: string | null; at: string; byUs?: boolean; previous?: unknown }
-export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; installed: Record<string, InstalledRecord>; lastRun: string }
+/** `versions`: the `{{key}}` values this host was last converged to, so uninstall can recognise the entries it wrote. */
+export interface InstalledRecord { version: string | null; at: string; byUs?: boolean; previous?: unknown; versions?: Record<string, string> }
+export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; cooldownDays?: number; installed: Record<string, InstalledRecord>; lastRun: string }

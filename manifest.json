@@ -115,7 +115,8 @@
         "set-claude-headless-seed",
         "set-codex-memories",
         "instr-global"
-      ]
+      ],
+      "channel": "stable"
     }
   },
   "components": [
@@ -462,11 +463,21 @@
           "typescript-language-server",
           "--version"
         ],
-        "latest": {
-          "npm": "typescript-language-server"
-        },
         "packages": {
-          "npm": "typescript-language-server@6.0.0 typescript@7.0.2"
+          "npm": "typescript-language-server@{{version}} typescript@{{typescript}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "typescript-language-server",
+          "pin": "6.0.2"
+        },
+        "typescript": {
+          "registry": "npm",
+          "package": "typescript",
+          "pin": "7.0.2",
+          "major": 7
         }
       }
     },
@@ -492,11 +503,15 @@
           "pyright",
           "--version"
         ],
-        "latest": {
-          "npm": "pyright@1.1.414"
-        },
         "packages": {
-          "npm": "pyright@1.1.414"
+          "npm": "pyright@{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "pyright",
+          "pin": "1.1.414"
         }
       }
     },
@@ -524,7 +539,14 @@
         ],
         "versionRegex": "v(\\d+\\.\\d+\\.\\d+)",
         "packages": {
-          "go": "golang.org/x/tools/gopls@v0.23.0"
+          "go": "golang.org/x/tools/gopls@v{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "go",
+          "package": "golang.org/x/tools/gopls",
+          "pin": "0.23.0"
         }
       }
     },
@@ -555,11 +577,16 @@
           "caveman",
           "--version"
         ],
-        "latest": {
-          "npm": "@caveman-ai/cli@1.3.4"
-        },
         "packages": {
-          "npm": "@caveman-ai/cli@1.3.4"
+          "npm": "@caveman-ai/cli@{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "@caveman-ai/cli",
+          "pin": "1.3.4",
+          "major": 1
         }
       }
     },
@@ -591,11 +618,8 @@
           "playwright-cli",
           "--version"
         ],
-        "latest": {
-          "npm": "@playwright/cli@0.1.21"
-        },
         "packages": {
-          "npm": "@playwright/cli@0.1.21"
+          "npm": "@playwright/cli@{{version}}"
         },
         "postInstall": {
           "linux": [
@@ -619,6 +643,13 @@
               "--skills"
             ]
           ]
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "@playwright/cli",
+          "pin": "0.1.22"
         }
       }
     },
@@ -683,10 +714,14 @@
           "--version"
         ],
         "packages": {
-          "npm": "ccusage@20.0.23"
-        },
-        "latest": {
-          "npm": "ccusage@20.0.23"
+          "npm": "ccusage@{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "ccusage",
+          "pin": "20.0.28"
         }
       }
     },
@@ -717,10 +752,14 @@
           "--version"
         ],
         "packages": {
-          "npm": "happy@1.2.4"
-        },
-        "latest": {
-          "npm": "happy@1.2.4"
+          "npm": "happy@{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "happy",
+          "pin": "1.2.5"
         }
       }
     },
@@ -2348,13 +2387,20 @@
             "npm",
             "install",
             "-g",
-            "agent-browser@0.38.1"
+            "agent-browser@{{version}}"
           ],
           [
             "agent-browser",
             "install"
           ]
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "agent-browser",
+          "pin": "0.39.0"
+        }
       }
     },
     {
@@ -2389,10 +2435,17 @@
         "command": "npx",
         "args": [
           "-y",
-          "@upstash/context7-mcp@4.1.1"
+          "@upstash/context7-mcp@{{version}}"
         ],
         "extra": {
           "startup_timeout_sec": 20
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "@upstash/context7-mcp",
+          "pin": "4.3.0"
         }
       }
     },
@@ -2496,8 +2549,15 @@
         "command": "npx",
         "args": [
           "-y",
-          "chrome-devtools-mcp@1.9.0"
+          "chrome-devtools-mcp@{{version}}"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "chrome-devtools-mcp",
+          "pin": "1.10.1"
+        }
       }
     },
     {
@@ -2652,9 +2712,16 @@
         "command": "npx",
         "args": [
           "-y",
-          "kubernetes-mcp-server@0.0.67",
+          "kubernetes-mcp-server@{{version}}",
           "--read-only"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "kubernetes-mcp-server",
+          "pin": "0.0.67"
+        }
       }
     },
     {
@@ -2688,9 +2755,16 @@
         "command": "npx",
         "args": [
           "-y",
-          "kubernetes-mcp-server@0.0.67",
+          "kubernetes-mcp-server@{{version}}",
           "--read-only"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "kubernetes-mcp-server",
+          "pin": "0.0.67"
+        }
       }
     },
     {
@@ -2736,7 +2810,7 @@
         "transport": "stdio",
         "command": "uvx",
         "args": [
-          "proxmox-mcp-plus==0.5.18"
+          "proxmox-mcp-plus=={{version}}"
         ],
         "env": {
           "PROXMOX_USER": "root@pam"
@@ -2746,6 +2820,13 @@
           "PROXMOX_TOKEN_NAME",
           "PROXMOX_TOKEN_VALUE"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "pypi",
+          "package": "proxmox-mcp-plus",
+          "pin": "0.6.1"
+        }
       }
     },
     {
@@ -2794,7 +2875,7 @@
         "transport": "stdio",
         "command": "uvx",
         "args": [
-          "proxmox-mcp-plus==0.5.18"
+          "proxmox-mcp-plus=={{version}}"
         ],
         "env": {
           "PROXMOX_USER": "root@pam"
@@ -2804,6 +2885,13 @@
           "PROXMOX_TOKEN_NAME",
           "PROXMOX_TOKEN_VALUE"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "pypi",
+          "package": "proxmox-mcp-plus",
+          "pin": "0.6.1"
+        }
       }
     },
     {
@@ -2841,7 +2929,7 @@
         "command": "npx",
         "args": [
           "-y",
-          "@hexsleeves/tailscale-mcp-server@1.3.4"
+          "@hexsleeves/tailscale-mcp-server@{{version}}"
         ],
         "env": {
           "TAILSCALE_TAILNET": "-"
@@ -2849,6 +2937,13 @@
         "secretEnv": [
           "TAILSCALE_API_KEY"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "@hexsleeves/tailscale-mcp-server",
+          "pin": "1.3.4"
+        }
       }
     },
     {
@@ -2889,7 +2984,7 @@
         "command": "npx",
         "args": [
           "-y",
-          "@hexsleeves/tailscale-mcp-server@1.3.4"
+          "@hexsleeves/tailscale-mcp-server@{{version}}"
         ],
         "env": {
           "TAILSCALE_TAILNET": "-"
@@ -2897,6 +2992,13 @@
         "secretEnv": [
           "TAILSCALE_API_KEY"
         ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "@hexsleeves/tailscale-mcp-server",
+          "pin": "1.3.4"
+        }
       }
     },
     {
@@ -2922,17 +3024,27 @@
       "spec": {
         "kind": "mcp",
         "target": "claude",
-        "name": "n8n-mcp@2.87.0",
+        "name": "n8n-mcp",
         "transport": "stdio",
         "command": "npx",
         "args": [
           "-y",
-          "n8n-mcp@2.87.0"
+          "n8n-mcp@{{version}}"
         ],
         "env": {
           "MCP_MODE": "stdio",
           "LOG_LEVEL": "error",
           "DISABLE_CONSOLE_OUTPUT": "true"
+        },
+        "formerNames": [
+          "n8n-mcp@2.87.0"
+        ]
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "n8n-mcp",
+          "pin": "2.92.1"
         }
       }
     },

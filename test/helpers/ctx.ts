@@ -22,5 +22,5 @@ export function makeTestCtx(o: FakeOpts = {}): Ctx & { calls: string[][]; opts: 
   const home = mkdtempSync(join(tmpdir(), 'sai-home-'));
   const host: HostInfo = { platform: 'linux', arch: 'x64', isRoot: false, hasSudo: true, pkgManager: 'apt', isWsl: false, isProxmoxHost: false, isLxc: false, isNixOS: false, isMusl: false, hasAvx: true, hasBwrap: true, home, diskFreeMb: 100000, claudeRunning: false, windowsDeveloperMode: null, isElevated: null, osRelease: { ID: 'ubuntu' }, ...o.host };
   const env = { ...o.env };
-  return { calls, opts: optsLog, host, paths: resolvePaths(host, env), run, log: createLogger({ quiet: true }), dryRun: o.dryRun ?? false, yes: true, noAudit: false, channel: 'latest', secrets: new Map(Object.entries(o.secrets ?? {})), fetch: o.fetch ?? (globalThis.fetch as typeof fetch), env, manifest: o.manifest ?? { version: 1, profiles: {}, components: [] }, elevate: o.elevate ?? false };
+  return { calls, opts: optsLog, host, paths: resolvePaths(host, env), run, log: createLogger({ quiet: true }), dryRun: o.dryRun ?? false, yes: true, noAudit: false, channel: 'latest', cooldownDays: 0, secrets: new Map(Object.entries(o.secrets ?? {})), fetch: o.fetch ?? (globalThis.fetch as typeof fetch), env, manifest: o.manifest ?? { version: 1, profiles: {}, components: [] }, elevate: o.elevate ?? false };
 }

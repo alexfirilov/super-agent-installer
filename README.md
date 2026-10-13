@@ -36,7 +36,7 @@ mind losing, install into a dedicated management VM or container instead.
     super-agent-installer uninstall <id...>   remove named components (only ones it installed)
     super-agent-installer uninstall --all      remove every component it installed on this host
 
-Flags: --profile all|minimal|devops|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate, --all, --force.
+Flags: --profile all|minimal|devops|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --cooldown <days>, --manifest <path|url>, --offline, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate, --all, --force.
 
 Exit codes, every command: `0` done, `1` a step failed, `2` nothing failed but requested work could not be completed
 (a component blocked on an agent that never signed in; drift for `check`; a dead proxy route for `doctor`),
@@ -65,16 +65,35 @@ Exit codes, every command: `0` done, `1` a step failed, `2` nothing failed but r
 `check` (and the table at the end of `update`) compares each selected component with the manifest. For tools,
 agents and plugins that is presence plus version: installed vs the pinned or upstream version. For settings, MCP
 servers, hooks, the status line and the instructions block it is the configured value vs the wanted one, so an MCP
-entry whose command, args or env differ from the manifest shows as `missing` (`install`/`update` rewrites it).
+entry whose command, args (including the resolved package version) or env differ from the manifest shows as
+`outdated` (`install`/`update` rewrites it).
 It does not inspect anything outside those definitions (a plugin's own files, a skill's contents).
 
-### Versions
+### Catalog and versions
 
-Every component installed through a package registry -- npm tools, the `npx`/`uvx` launch lines of MCP servers,
-`gopls` -- names an exact version in `manifest.json`, so a given installer release installs a known set. `update`
-moves a component to that pin (never below a version you moved to yourself); a new installer release moves the
-pins, and `update` upgrades the installer first. Agents (Claude Code, Codex) and OS packages follow their own
-channels and package managers and are not pinned here.
+The binary is the engine; *what* it installs comes from the catalog, `manifest.json` on this repository's default
+branch. Every `install`, `update`, `check` and `list` fetches it, so adding, dropping or swapping a skill, plugin or
+MCP server is a commit here, not a new release. The last fetched copy is cached (`catalog.json` in the state dir),
+and the copy bundled into the binary is the final fallback. A catalog that declares a newer `minInstallerVersion`
+than the running binary, or that this binary cannot parse, is skipped with a warning to run `self-update`.
+`--manifest <path|url>` uses another catalog; `--offline` uses the cache (else the bundled copy) and does no lookups.
+
+Every package installed or launched through a registry -- npm tools, the `npx`/`uvx` launch lines of MCP servers,
+`gopls` -- is written in the catalog as `pkg@{{version}}` with a `versions` entry naming the registry, the package
+and a known-good `pin`. The version is decided at run time and then written out exactly (`n8n-mcp@2.92.1`), so the
+agents never launch a floating `@latest`, and `check` and uninstall can tell what is on the host:
+
+| Channel | Version installed |
+|---|---|
+| `latest` (default) | the newest release on npm / PyPI / the Go proxy that is at least `--cooldown` days old, never below the pin |
+| `stable` (`--channel stable`; the `proxmox-host` profile) | exactly the catalog pin |
+
+The cooldown is asked once (3 days or 0) and saved per host, like the channel; `--cooldown <days>` overrides it,
+and an unattended run without a saved choice uses 3. A delay of a few days skips most hijacked releases, which are
+usually caught and pulled within hours. A `versions` entry can hold a component on one major version (`"major": 1`)
+until the installer is verified against the next. If a registry cannot be reached, the pin is used and the run says
+so. Agents (Claude Code, Codex) and OS packages follow their own channels and package managers; plugins and skills
+follow their marketplaces and repositories.
 
 ### caveman runs with the proxy off
 

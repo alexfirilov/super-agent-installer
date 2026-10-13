@@ -33,3 +33,17 @@ describe('previous values (Finding 9)', () => {
     expect(gone.installed.m).toBeUndefined();
   });
 });
+
+describe('resolved versions and the cooldown choice', () => {
+  const sel = { profile: 'all', components: [{ id: 'm' }, { id: 'f' }], excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 } as unknown as Selection;
+  const rec = (componentId: string, ok = true): StepRecord => ({ componentId, op: 'install', ok, changed: true, message: '' });
+  it('records the versions a component was converged to, but not for one whose step failed', () => {
+    const s = buildState(null, sel, [rec('m'), rec('f', false)], {}, '0.5.0', 'latest', { cooldownDays: 0, versions: [{ componentId: 'm', key: 'version', version: '2.0.0' }, { componentId: 'f', key: 'version', version: '9.9.9' }] });
+    expect(s.installed.m?.versions).toEqual({ version: '2.0.0' }); expect(s.installed.f).toBeUndefined(); expect(s.cooldownDays).toBe(0);
+  });
+  it('keeps the saved cooldown when a run does not pass one', () => {
+    const first = buildState(null, sel, [], {}, '0.5.0', 'latest', { cooldownDays: 3 });
+    expect(buildState(first, sel, [], {}, '0.5.0', 'latest').cooldownDays).toBe(3);
+    expect('cooldownDays' in buildState(null, sel, [], {}, '0.5.0', 'latest')).toBe(false);
+  });
+});

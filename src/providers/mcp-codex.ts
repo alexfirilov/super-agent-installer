@@ -19,7 +19,7 @@ import { getCodexState } from './codex-plugin.js';
 import { tomlTableEquals, placeTomlMarkerBlock, TomlError } from '../config/toml.js';
 import { backupFile, writeTextAtomic } from '../config/json.js';
 import { action, ok, fail, skipAction } from './types.js';
-import { secretHints, substituteSpec, runMcpPostInstall } from './mcp-shared.js';
+import { secretHints, substituteSpec, runMcpPostInstall, withoutVersions } from './mcp-shared.js';
 import { MARKER_STYLES, extractMarkerBlock, removeMarkerBlock } from '../config/markers.js';
 
 export const ENV_VARS_SUPPORTED = true;
@@ -71,7 +71,7 @@ export const mcpCodexProvider: Provider = {
       return [action(c.id, 'uninstall', `remove MCP ${spec.name} (Codex)`, async () => {
         // same rule as the Claude side: still ours -> remove (and restore what we replaced); edited since -> leave
         let desired: Record<string, unknown> | null = null; try { desired = desiredCodexMcp(substituteSpec(spec, ctx)); } catch { desired = null; }
-        if (desired && installed.details !== undefined && !tomlTableEquals(installed.details, desired)) return ok(`${spec.name}: left in place, it was modified after this installer wrote it`, false);
+        if (desired && installed.details !== undefined && !tomlTableEquals(withoutVersions(installed.details), withoutVersions(desired))) return ok(`${spec.name}: left in place, it was modified after this installer wrote it`, false);
         await ctx.run(['codex', 'mcp', 'remove', spec.name], { allowFailure: true });
         const previous = ctx.state?.installed[c.id]?.previous;
         if (previous && typeof previous === 'object') {
@@ -102,7 +102,8 @@ export const mcpCodexProvider: Provider = {
       const chk = await ctx.run(['codex', 'mcp', 'get', spec.name, '--json'], { readOnly: true, allowFailure: true }); if (chk.code !== 0 && !ctx.dryRun) return fail(`codex cannot read ${spec.name} after write: ${(chk.stderr || chk.stdout).trim()}`);
       const post = await runMcpPostInstall(spec, ctx);
       if (post) return fail(post);
-      return { ...ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`), ...(installed ? { previous: installed.details } : {}) };
+      // as on the Claude side: only an entry we never configured before is the user's own
+      return { ...ok(`${spec.name} configured for Codex.${loginHint}${secretHints(c, ctx)}${note}`), ...(installed && !ctx.state?.installed[c.id] ? { previous: installed.details } : {}) };
     })];
   },
 };

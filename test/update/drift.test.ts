@@ -22,3 +22,13 @@ describe('driftReport', () => {
     expect(rows.map((r) => `${r.id}:${r.status}`)).toEqual(['gone:ok', 'still-there:outdated', 'properly-disabled:ok', 'still-enabled:outdated', 'never-installed:ok']);
   });
 });
+
+describe('MCP drift', () => {
+  it('an MCP entry whose launch line differs from what install would write is outdated, not ok', async () => {
+    clearProviders();
+    const mcpC = (id: string): Component => ({ ...c(id, 'mcp'), spec: { kind: 'mcp', target: 'claude', name: id, transport: 'stdio', command: 'npx', args: [] } });
+    registerProvider({ kind: 'mcp', detect: async () => ({ version: null, details: {} }), plan: async (comp) => (comp.id === 'stale' ? [{ id: 'a', componentId: comp.id, op: 'configure', description: '', run: async () => ({ ok: true, changed: true, message: '' }) }] : []) });
+    const rows = await driftReport(makeTestCtx(), [mcpC('stale'), mcpC('current')]);
+    expect(rows.map((r) => `${r.id}:${r.status}`)).toEqual(['stale:outdated', 'current:ok']);
+  });
+});

@@ -4,6 +4,7 @@ import { resolveSelection } from '../manifest/resolve.js';
 import { buildPlan } from '../planner.js';
 import { executePlan } from '../executor.js';
 import { readState, writeState, buildState, resolveChannel } from '../state/state.js';
+import { resolveVersions } from '../version/resolve.js';
 import { renderPlan, renderSummary } from './summary.js';
 import { removePersistedSecrets } from '../secrets/persist.js';
 /**
@@ -38,7 +39,9 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   if (!target.length) { ctx.log.error('nothing to uninstall: pass component ids or install first'); return 1; }
   // explicit ids only: never widen to the prerequisite closure (uninstall sk-x must not remove node)
   const resolved = resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: target });
-  const wanted = new Set(target); const sel = { ...resolved, components: resolved.components.filter((c) => wanted.has(c.id)) };
+  // no registry lookups: `{{version}}` is filled with what the host was last converged to (else the pin), so an MCP
+  // entry is still recognised as the one we wrote
+  const wanted = new Set(target); const sel = { ...resolved, components: (await resolveVersions(resolved.components.filter((c) => wanted.has(c.id)), ctx, { pinsOnly: true, recorded: (id) => state?.installed[id]?.versions })).components };
   const plan = await buildPlan(sel, ctx, 'uninstall');
   if (ids?.length && !o.force) {
     const foreign = target.filter((id) => plan.detections[id] && !ours(id));

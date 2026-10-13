@@ -15,4 +15,10 @@ describe('parseCli', () => {
     expect(parseCli(['--version'])).toMatchObject({ command: 'version' }); expect(parseCli(['bogus'])).toMatchObject({ command: 'help', error: expect.stringContaining('bogus') });
     expect(() => parseCli(['install', '--profile', 'nope'])).toThrow(/profile/);
   });
+  it('parses --cooldown and --offline, and rejects a cooldown that is not a whole number of days', () => {
+    expect(parseCli(['update', '--cooldown', '0', '--offline'])).toMatchObject({ command: 'update', cooldown: 0, offline: true });
+    expect(parseCli(['install'])).toMatchObject({ cooldown: undefined, offline: false });
+    for (const bad of ['-1', '3d', '1.5', '']) expect(() => parseCli(['install', '--cooldown', bad]), bad).toThrow(/--cooldown/);
+  });
 });
+

@@ -6,3 +6,5 @@ export const NODE_MAJOR = 24;
 export const OFFICIAL_MARKETPLACE = 'claude-plugins-official';
 export const OFFICIAL_MARKETPLACE_SOURCE = 'anthropics/claude-plugins-official';
 export const REPO = 'alexfirilov/super-agent-installer';
+/** Cooldown when neither `--cooldown` nor the host's saved choice says otherwise (and nobody is there to ask). */
+export const DEFAULT_COOLDOWN_DAYS = 3;

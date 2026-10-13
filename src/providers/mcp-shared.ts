@@ -43,3 +43,13 @@ export async function runMcpPostInstall(spec: McpSpec, ctx: Ctx): Promise<string
   }
   return null;
 }
+
+/** `value` with every exact package version in its strings (`pkg@1.2.3`, `pkg==1.2.3`) blanked out. Uninstall compares
+ * through it: an entry that differs from ours only by the package version is still ours -- an older launch line this
+ * installer wrote before the version moved (or before v0.5 recorded which version it wrote). */
+export function withoutVersions<T>(value: T): T {
+  if (typeof value === 'string') return value.replace(/(@|==)v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, '$1*') as unknown as T;
+  if (Array.isArray(value)) return value.map(withoutVersions) as unknown as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withoutVersions(v)])) as T;
+  return value;
+}

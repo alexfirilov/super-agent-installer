@@ -14,7 +14,7 @@ export async function writeState(path: string, state: HostState): Promise<void> 
  * `selectedIds` with that narrow closure silently dropped every other component out of update, check and
  * uninstall, so the host stopped being managed without anyone being told. Full-profile runs still replace.
  */
-export function buildState(prev: HostState | null, sel: Selection, records: StepRecord[], detections: Record<string, Installed | null>, installerVersion: string, channel: Channel, opts: { mergeSelected?: boolean } = {}): HostState {
+export function buildState(prev: HostState | null, sel: Selection, records: StepRecord[], detections: Record<string, Installed | null>, installerVersion: string, channel: Channel, opts: { mergeSelected?: boolean; cooldownDays?: number; versions?: Array<{ componentId: string; key: string; version: string }> } = {}): HostState {
   const installed: HostState['installed'] = { ...(prev?.installed ?? {}) }; const now = new Date().toISOString();
   for (const r of records) {
     if (!r.ok) continue;
@@ -29,9 +29,15 @@ export function buildState(prev: HostState | null, sel: Selection, records: Step
     }
     else if (r.op === 'skip' && !installed[r.componentId] && detections[r.componentId]) installed[r.componentId] = { version: detections[r.componentId]?.version ?? null, at: now, byUs: false };
   }
+  // the versions a component now runs: only where this run left it converged (no failed step for it)
+  for (const v of opts.versions ?? []) {
+    const rec = installed[v.componentId]; if (!rec || records.some((r) => r.componentId === v.componentId && !r.ok)) continue;
+    installed[v.componentId] = { ...rec, versions: { ...rec.versions, [v.key]: v.version } };
+  }
   const selected = sel.components.map((c) => c.id);
   const selectedIds = opts.mergeSelected ? [...new Set([...(prev?.selectedIds ?? []), ...selected])] : selected;
-  return { version: 1, installerVersion, profile: opts.mergeSelected ? prev?.profile ?? sel.profile : sel.profile, selectedIds, channel, installed, lastRun: now };
+  const cooldownDays = opts.cooldownDays ?? prev?.cooldownDays;
+  return { version: 1, installerVersion, profile: opts.mergeSelected ? prev?.profile ?? sel.profile : sel.profile, selectedIds, channel, ...(cooldownDays !== undefined ? { cooldownDays } : {}), installed, lastRun: now };
 }
 /**
  * Which release channel this run uses. An explicit `--channel` wins; otherwise the channel saved by the last run on
