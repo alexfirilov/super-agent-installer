@@ -16,6 +16,7 @@ Owner's decisions:
 - Remove Playwright MCP, chrome-devtools and GitHub MCP. `playwright-cli` and `gh` cover those needs.
 - Drop the components in the agreed drop list.
 - Work order: fix CI and Windows tests, fix freshness and retirement, prune the catalog, release v0.5.0.
+- mattpocock and commit-commands are on by default. Drop ccusage and claude-hud.
 
 Builder's calls, made on the owner's questions and open to veto before release:
 
@@ -24,22 +25,19 @@ Builder's calls, made on the owner's questions and open to veto before release:
 - Keep Codex memories on.
 - Replace the Context7 plugin with a direct MCP entry on `https://mcp.context7.com/mcp`, which works without auth.
 - Set `ENABLE_STOP_REVIEW=0` for `security-guidance`.
-- Drop plugin-dev, happy and Serena. Keep ccusage and claude-hud optional.
-- mattpocock becomes optional: `grilling`, `grill-me`, `handoff`, `writing-for-agents`,
-  `improve-codebase-architecture`.
+- Drop plugin-dev, happy and Serena.
 - Retire components no tier listed: feature-dev, claude-md-management, exa, microsoft-docs, grafana, obsidian,
   elements-of-style, vercel agent-skills.
-- Add optional packs: trailofbits (`semgrep`, `supply-chain-risk-auditor`, `modern-python`), hashicorp Terraform, docker.
 - npm, PyPI and Go packages keep the 3-day cooldown. `--cooldown 0` gets the newest. Skills and plugins have none.
 
 ## Catalog
 
 On by default: Claude Code, Codex, git, node, jq, ripgrep, gh, PowerShell 7, bubblewrap, TypeScript and Pyright language
 servers with their LSP plugins, `playwright-cli`, superpowers (both agents), `security-guidance`, `frontend-design` (both
-agents), `skill-creator`, Context7 (both agents), Codex memories, Windows git symlinks, global instructions.
+agents), `skill-creator`, Context7 (both agents), mattpocock (`grill-me`, `grilling`, `handoff`, `writing-for-agents`,
+`improve-codebase-architecture`, and the `codebase-design` and `domain-modeling` skills it calls), commit-commands, Codex memories, Windows git symlinks, global instructions.
 
-Off by default: uv, Go and gopls with its LSP plugin, ccusage, claude-hud, commit-commands, mattpocock, trailofbits,
-hashicorp, docker, and the two headless-host settings.
+Off by default: uv, Go and gopls with its LSP plugin, and the two headless-host settings.
 
 Codex ships its own `skill-creator` in `~/.codex/skills/.system`, so the catalog installs that one on Claude only.
 

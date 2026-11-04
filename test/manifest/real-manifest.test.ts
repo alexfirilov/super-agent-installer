@@ -11,15 +11,15 @@ describe('manifest.json', () => {
   it('the default selection is the agreed core, with no slot conflicts', () => {
     const s = resolveSelection(m, host('linux'), {});
     expect(slotConflicts(s.components)).toEqual([]);
-    expect(s.components.map((c) => c.id)).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'playwright-cli', 'cp-superpowers', 'cx-superpowers', 'cp-security-guidance', 'set-security-stop-review', 'cp-frontend-design', 'sk-frontend-design-codex', 'cp-skill-creator', 'cp-typescript-lsp', 'cp-pyright-lsp', 'mcp-context7', 'mcp-cx-context7', 'set-codex-memories', 'instr-global']));
+    expect(s.components.map((c) => c.id)).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'playwright-cli', 'cp-superpowers', 'cx-superpowers', 'cp-security-guidance', 'set-security-stop-review', 'cp-frontend-design', 'sk-frontend-design-codex', 'cp-skill-creator', 'cp-typescript-lsp', 'cp-pyright-lsp', 'mcp-context7', 'mcp-cx-context7', 'set-codex-memories', 'instr-global', 'sk-mattpocock', 'cp-commit-commands']));
     expect(s.tokenTotals.claude).toBeLessThan(8000); expect(s.codexMcpCount).toBeLessThanOrEqual(5);
   });
   it('optional components stay out of the default selection', () => {
-    for (const id of ['uv', 'gopls', 'cp-gopls-lsp', 'ccusage', 'cp-claude-hud', 'cp-commit-commands', 'sk-mattpocock', 'sk-trailofbits', 'sk-hashicorp-terraform', 'sk-docker']) expect(defaults('linux'), id).not.toContain(id);
+    for (const id of ['uv', 'gopls', 'cp-gopls-lsp']) expect(defaults('linux'), id).not.toContain(id);
   });
   it('everything agreed to go is retired, not silently deleted, so hosts that have it can remove it', () => {
     const live = m.components.map((c) => c.id); const retired = (m.retired ?? []).map((c) => c.id);
-    for (const id of ['caveman-cli', 'cp-caveman', 'sk-caveman-codex', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'cp-playwright', 'cp-chrome-devtools-mcp', 'cp-github', 'mcp-cx-github', 'mcp-cx-chrome-devtools', 'cp-context7', 'cp-remember', 'cx-remember', 'cp-hookify', 'sk-find-skills', 'sk-powershell-windows', 'sk-cc-devops', 'sk-agent-browser', 'cp-serena', 'happy', 'cp-plugin-dev', 'mcp-proxmox-claude', 'mcp-ha-claude', 'mcp-k8s-claude', 'mcp-tailscale-claude', 'mcp-n8n-claude', 'docker-mcp-gateway']) {
+    for (const id of ['caveman-cli', 'cp-caveman', 'sk-caveman-codex', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'cp-playwright', 'cp-chrome-devtools-mcp', 'cp-github', 'mcp-cx-github', 'mcp-cx-chrome-devtools', 'cp-context7', 'cp-remember', 'cx-remember', 'cp-hookify', 'sk-find-skills', 'sk-powershell-windows', 'sk-cc-devops', 'sk-agent-browser', 'cp-serena', 'happy', 'cp-plugin-dev', 'mcp-proxmox-claude', 'mcp-ha-claude', 'mcp-k8s-claude', 'mcp-tailscale-claude', 'mcp-n8n-claude', 'docker-mcp-gateway', 'ccusage', 'cp-claude-hud', 'sl-claude-hud']) {
       expect(retired, id).toContain(id); expect(live, id).not.toContain(id);
     }
   });
@@ -33,9 +33,9 @@ describe('manifest.json', () => {
   it('security-guidance always brings its Stop-review setting, also on a host with a saved selection', () => {
     expect(resolveSelection(m, host('linux'), { savedIds: ['cp-security-guidance'] }).components.map((c) => c.id)).toContain('set-security-stop-review');
   });
-  it('the mattpocock wrapper skill ships with the skill it calls', () => {
+  it('mattpocock skills ship with the skills they call', () => {
     const c = m.components.find((x) => x.id === 'sk-mattpocock')!.spec as { skills: string[] };
-    expect(c.skills).toEqual(expect.arrayContaining(['grill-me', 'grilling']));
+    expect(c.skills).toEqual(expect.arrayContaining(['grill-me', 'grilling', 'improve-codebase-architecture', 'codebase-design', 'domain-modeling']));
   });
   it('Context7 on Claude uses the URL that works without auth', () => {
     expect((m.components.find((c) => c.id === 'mcp-context7')!.spec as { url: string }).url).toBe('https://mcp.context7.com/mcp');
