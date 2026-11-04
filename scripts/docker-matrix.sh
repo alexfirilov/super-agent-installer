@@ -34,7 +34,14 @@ INNER='
   if ! printf "%s\n" "$out" | grep -q "sign-in was skipped with --no-login"; then
     echo "FAILED: $SAI_IMAGE: a --no-login run must still tell the user each agent is not signed in"; exit 1
   fi
-  step super-agent-installer check --manifest /sai/manifest.json
+  # Exit 2 is drift. A distro's jq or gh trailing upstream is outdated by design, and only that passes: nothing may be
+  # missing right after an install, and nothing but a tool may be behind.
+  echo; echo "--- $SAI_IMAGE: super-agent-installer check"
+  rc=0; drift=$(super-agent-installer check --manifest /sai/manifest.json) || rc=$?
+  echo "$drift"
+  [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || { echo "FAILED: $SAI_IMAGE check exited $rc"; exit 1; }
+  if printf "%s\n" "$drift" | grep -E " missing *$"; then echo "FAILED: $SAI_IMAGE: missing right after install"; exit 1; fi
+  if printf "%s\n" "$drift" | grep -E " outdated *$" | grep -Ev "^[a-z0-9-]+ +tool "; then echo "FAILED: $SAI_IMAGE: outdated right after install"; exit 1; fi
   step super-agent-installer update --no-self-update --yes --manifest /sai/manifest.json
 '
 for df in test/docker/Dockerfile.*; do

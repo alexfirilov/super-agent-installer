@@ -8,5 +8,6 @@ describe('probeVersion', () => {
     expect(await probeVersion(fake({}), ['nope', '--version'])).toBeNull();
     expect(await probeVersion(fake({ 'x --version': new Error('ENOENT') }), ['x', '--version'])).toBeNull();
   });
+  it('reads a major.minor version, which Debian\'s jq prints', async () => { expect(await probeVersion(fake({ 'jq --version': 'jq-1.7\n' }), ['jq', '--version'])).toBe('1.7.0'); });
   it('applies a custom regex', async () => { expect(await probeVersion(fake({ 'go version': 'go version go1.27.0 linux/amd64' }), ['go', 'version'], 'go(\\d+\\.\\d+\\.\\d+)')).toBe('1.27.0'); });
 });
