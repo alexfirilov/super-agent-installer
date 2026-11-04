@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { skillProvider } from '../../src/providers/skill.js';
+import { skillProvider, skillsCliVersion } from '../../src/providers/skill.js';
 import { SKILLS_CLI } from '../../src/pins.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
@@ -39,12 +39,83 @@ describe('skillProvider', () => {
     expect((await (await skillProvider.plan(skill('sk-w', 'a/b', ['x'], ['codex']), warn, null, 'install'))[0]!.run(warn)).ok).toBe(true);
     expect(warn.log.lines.some((l) => /WARN.*audit/.test(l))).toBe(true);
   });
-  it('updates once per run and removes on uninstall', async () => {
-    const ctx = makeTestCtx({ responses: { 'node --version': 'v24.19.0', [`npx -y skills@${SKILLS_CLI} update -g -y`]: '✓ All global skills are up to date', [`npx -y skills@${SKILLS_CLI} remove x -g -y`]: '' } }); withLock(ctx, { x: { source: 'a/b' } });
+  it('removes by name on uninstall', async () => {
+    const ctx = makeTestCtx({ responses: { 'node --version': 'v24.19.0' } }); withLock(ctx, { x: { source: 'a/b', skillFolderHash: 'abc' } });
     const c = skill('sk', 'a/b', ['x']); const inst = await skillProvider.detect(c, ctx);
-    const r = await (await skillProvider.plan(c, ctx, inst, 'update'))[0]!.run(ctx); expect(r).toMatchObject({ ok: true, changed: false });
-    await (await skillProvider.plan(skill('sk2', 'a/b', ['x']), ctx, inst, 'update'))[0]!.run(ctx); expect(ctx.calls.filter((a) => a.includes('update')).length).toBe(1);
-    await (await skillProvider.plan(c, ctx, inst, 'uninstall'))[0]!.run(ctx); expect(ctx.calls).toContainEqual(['npx', '-y', `skills@${SKILLS_CLI}`, 'remove', 'x', '-g', '-y']);
+    await (await skillProvider.plan(c, ctx, inst, 'uninstall'))[0]!.run(ctx);
+    expect(ctx.calls).toContainEqual(['npx', '-y', `skills@${SKILLS_CLI}`, 'remove', 'x', '-g', '-y']);
+  });
+  it('a failed removal is a failure, and a same-named skill from another repo is left alone', async () => {
+    const remove = (n: string) => `npx -y skills@${SKILLS_CLI} remove ${n} -g -y`;
+    const ctx = makeTestCtx({ responses: { 'node --version': 'v24.19.0', [remove('x')]: { code: 1, stderr: 'locked' } } });
+    withLock(ctx, { x: { source: 'a/b', skillFolderHash: 'abc' }, y: { source: 'someone/else', skillFolderHash: 'def' } });
+    const c = skill('sk', 'a/b', ['x', 'y']);
+    const r = await (await skillProvider.plan(c, ctx, { version: 'abc' }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toMatch(/could not remove x/);
+    expect(ctx.calls.some((a) => a.join(' ') === remove('y'))).toBe(false);
+  });
+  describe('staying current', () => {
+    const check = `npx -y skills@${SKILLS_CLI} check -g`; const c = skill('sk', 'a/b', ['x', 'y']);
+    const hosted = (responses: Record<string, string | { code: number; stdout?: string; stderr?: string }>, fetch: typeof globalThis.fetch = auditFetch('pass')) => {
+      const ctx = makeTestCtx({ fetch, responses: { 'node --version': 'v24.19.0', ...responses } });
+      withLock(ctx, { x: { source: 'a/b', skillFolderHash: 'abc' }, y: { source: 'a/b', skillFolderHash: 'def' } });
+      return ctx;
+    };
+    it('a re-run of install refreshes a stale skill, by name, leaving skills the user added alone', async () => {
+      const update = `npx -y skills@${SKILLS_CLI} update x y -g -y`;
+      const ctx = hosted({ [check]: '\x1b[38;5;145m↑ x has an update\x1b[0m', [update]: '✓ Updated 1 skill(s)' });
+      const acts = await skillProvider.plan(c, ctx, { version: 'abc' }, 'install');
+      expect(acts[0]).toMatchObject({ op: 'update' });
+      expect(await acts[0]!.run(ctx)).toMatchObject({ ok: true, changed: true });
+      expect(ctx.calls.some((a) => a.join(' ') === update)).toBe(true);
+      expect(ctx.calls.some((a) => a.join(' ').endsWith('update -g -y'))).toBe(false);
+    });
+    it('plans nothing when upstream has nothing new', async () => {
+      const ctx = hosted({ [check]: '✓ All global skills are up to date' });
+      expect(await skillProvider.plan(c, ctx, { version: 'abc' }, 'update')).toEqual([]);
+      expect(await skillProvider.stale!(c, ctx)).toBe(false);
+    });
+    it('attempts the update when the check could not tell', async () => {
+      const ctx = hosted({ [check]: { code: 1, stderr: 'network down' } });
+      expect(await skillProvider.stale!(c, ctx)).toBeNull();
+      expect((await skillProvider.plan(c, ctx, { version: 'abc' }, 'update'))[0]).toMatchObject({ op: 'update' });
+    });
+    it('believes the report over the exit code: on Windows the CLI can die on a libuv assertion after finishing', async () => {
+      const update = `npx -y skills@${SKILLS_CLI} update x y -g -y`;
+      const crash = 'Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\\win\\async.c, line 94';
+      const ctx = hosted({ [check]: { code: 3221226505, stdout: '↑ y has an update', stderr: crash }, [update]: { code: 3221226505, stdout: '✓ Updated 1 skill(s)', stderr: crash } });
+      expect(await skillProvider.stale!(c, ctx)).toBe(true);
+      expect(await (await skillProvider.plan(c, ctx, { version: 'abc' }, 'update'))[0]!.run(ctx)).toMatchObject({ ok: true, changed: true });
+    });
+    it('a failed update is a failure, also when another skill in the batch worked', async () => {
+      const update = `npx -y skills@${SKILLS_CLI} update x y -g -y`;
+      const ctx = hosted({ [check]: '↑ x has an update', [update]: '✓ Updated 1 skill(s)\nFailed to update 1 skill(s)' });
+      expect((await (await skillProvider.plan(c, ctx, { version: 'abc' }, 'update'))[0]!.run(ctx)).ok).toBe(false);
+    });
+    it('an update passes the audit gate too: a failed audit keeps the current version', async () => {
+      const ctx = hosted({ [check]: '↑ x has an update' }, auditFetch('fail'));
+      const r = await (await skillProvider.plan(c, ctx, { version: 'abc' }, 'update'))[0]!.run(ctx);
+      expect(r.ok).toBe(false); expect(r.message).toMatch(/audit FAILED/);
+      expect(ctx.calls.some((a) => a.includes('update'))).toBe(false);
+    });
+    it('sets DISABLE_TELEMETRY on the CLI child only, never in the environment agents inherit', async () => {
+      const ctx = hosted({ [check]: '↑ x has an update' });
+      await skillProvider.stale!(c, ctx);
+      expect(ctx.opts.find((o) => o.argv.includes('check'))?.opts.env).toEqual({ DISABLE_TELEMETRY: '1' });
+      expect(process.env.DISABLE_TELEMETRY).toBeUndefined(); expect(ctx.env.DISABLE_TELEMETRY).toBeUndefined();
+    });
+  });
+  describe('skillsCliVersion', () => {
+    const packument = (versions: string[]) => (async () => new Response(JSON.stringify({ 'dist-tags': { latest: versions.at(-1) }, versions: Object.fromEntries(versions.map((v) => [v, {}])), time: Object.fromEntries(versions.map((v) => [v, '2020-01-01T00:00:00Z'])) }))) as unknown as typeof fetch;
+    it('takes the newest release on the latest channel, never below the pin', async () => {
+      expect(await skillsCliVersion(makeTestCtx({ fetch: packument([SKILLS_CLI, '99.0.0']) }))).toBe('99.0.0');
+      expect(await skillsCliVersion(makeTestCtx({ fetch: packument(['0.0.1']) }))).toBe(SKILLS_CLI);
+    });
+    it('uses the pin on stable, offline, and when the registry cannot be read', async () => {
+      const stable = makeTestCtx({ fetch: packument(['99.0.0']) }); stable.channel = 'stable'; expect(await skillsCliVersion(stable)).toBe(SKILLS_CLI);
+      const offline = makeTestCtx({ fetch: packument(['99.0.0']) }); offline.offline = true; expect(await skillsCliVersion(offline)).toBe(SKILLS_CLI);
+      expect(await skillsCliVersion(makeTestCtx({ fetch: (async () => { throw new Error('down'); }) as unknown as typeof fetch }))).toBe(SKILLS_CLI);
+    });
   });
   it('skips without node', async () => { const ctx = makeTestCtx({ responses: {} }); expect((await skillProvider.plan(skill('sk', 'a/b', ['x']), ctx, null, 'install'))[0]).toMatchObject({ op: 'skip' }); });
   it('runs postInstall argv in order after a successful install', async () => {
@@ -74,7 +145,7 @@ describe('skillProvider', () => {
   });
   it('skips the audit fetch entirely when ctx.noAudit is true', async () => {
     let fetchCalled = false;
-    const fetchSpy = (async () => { fetchCalled = true; return new Response(JSON.stringify({ gen: { status: 'fail' } })); }) as unknown as typeof fetch;
+    const fetchSpy = (async (u: string) => { if (!String(u).includes('registry.npmjs.org')) fetchCalled = true; return new Response(JSON.stringify({ gen: { status: 'fail' } })); }) as unknown as typeof fetch;
     const ctx = makeTestCtx({ fetch: fetchSpy, responses: { 'node --version': 'v24.19.0', [`npx -y skills@${SKILLS_CLI} add a/b --skill x -g -a claude-code -a codex -y`]: 'installed' } });
     ctx.noAudit = true;
     const r = await (await skillProvider.plan(skill('sk-noaudit', 'a/b', ['x']), ctx, null, 'install'))[0]!.run(ctx);

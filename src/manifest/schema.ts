@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { KINDS, PLATFORMS, PROFILE_NAMES, SLOTS, type Manifest } from '../types.js';
+import { KINDS, PLATFORMS, SLOTS, type Manifest } from '../types.js';
 
 export class ManifestError extends Error { constructor(public issues: string[]) { super(`Invalid manifest:\n- ${issues.join('\n- ')}`); } }
 
@@ -21,17 +21,16 @@ const spec = z.discriminatedUnion('kind', [agentSpec, claudePluginSpec, codexPlu
 const versionSource = z.object({ registry: z.enum(['npm', 'pypi', 'go']), package: z.string().min(1), pin: z.string().regex(/^\d+\.\d+\.\d+$/, 'pin must be an exact x.y.z version'), major: z.number().int().nonnegative().optional() });
 const component = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/), name: z.string(), kind: z.enum(KINDS), agents: z.enum(['claude', 'codex', 'both']), platforms: z.array(platform).min(1),
-  description: z.string(), verdict: z.enum(['must-have', 'recommended', 'optional']), defaultSelected: z.boolean(), forceOffInAll: z.boolean().optional(),
-  profiles: z.partialRecord(z.enum(PROFILE_NAMES), z.boolean()).optional(), prerequisites: z.array(z.string()).optional(), dependsOn: z.array(z.string()).optional(),
+  description: z.string(), verdict: z.enum(['must-have', 'recommended', 'optional']), defaultSelected: z.boolean(),
+  prerequisites: z.array(z.string()).optional(), dependsOn: z.array(z.string()).optional(),
   conflictsWith: z.array(z.string()).optional(), slot: z.enum(SLOTS).optional(), contextCostTokens: z.object({ claude: z.number().optional(), codex: z.number().optional() }).optional(),
   popularity: z.object({ stars: z.number().optional(), installs: z.number().optional(), downloadsWeekly: z.number().optional(), observedAt: z.string() }).optional(),
   secrets: z.array(z.object({ env: z.string(), prompt: z.string(), required: z.boolean() })).optional(),
   audit: z.array(z.object({ owner: z.string(), repo: z.string(), skill: z.string() })).optional(), postInstallHint: z.string().optional(), source: z.string().optional(), spec,
   versions: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), versionSource).optional(),
 });
-const profile = z.object({ description: z.string(), base: z.enum(['all', 'none']), include: z.array(z.string()).optional(), exclude: z.array(z.string()).optional(), agentFilter: z.enum(['claude', 'codex']).optional(), channel: z.enum(['latest', 'stable']).optional() }); // `headless` was accepted here once; it never did anything (headless is detected, not declared) and is ignored if present
-export const manifestSchema = z.object({ version: z.literal(1), minInstallerVersion: z.string().optional(), profiles: z.partialRecord(z.enum(PROFILE_NAMES), profile), components: z.array(component) });
-// zod 4: z.record with an enum key is exhaustive; partialRecord allows a subset of profiles. If discriminatedUnion rejects the refined mcpSpec, drop the .refine and add the http/stdio check to the manual issues loop below.
+export const manifestSchema = z.object({ version: z.literal(1), minInstallerVersion: z.string().optional(), components: z.array(component), retired: z.array(component.extend({ replacedBy: z.string().optional() })).optional() });
+// If discriminatedUnion rejects the refined mcpSpec, drop the .refine and add the http/stdio check to the manual issues loop below.
 
 /** The `{{key}}` version placeholders a spec uses, each once. */
 export function placeholders(spec: unknown): string[] {
@@ -55,7 +54,10 @@ export function parseManifest(json: unknown): Manifest {
     for (const k of used) if (!declared.includes(k)) issues.push(`${c.id}: {{${k}}} has no entry in versions`);
     for (const k of declared) if (!used.includes(k)) issues.push(`${c.id}: versions.${k} is never used in the spec`);
   }
-  for (const [name, p] of Object.entries(m.profiles)) for (const ref of [...(p?.include ?? []), ...(p?.exclude ?? [])]) if (!ids.has(ref)) issues.push(`profile ${name}: unknown id ${ref}`);
+  for (const r of m.retired ?? []) {
+    if (ids.has(r.id)) issues.push(`${r.id}: both a component and retired`);
+    if (r.replacedBy && !ids.has(r.replacedBy)) issues.push(`${r.id}: replacedBy unknown id ${r.replacedBy}`);
+  }
   if (issues.length) throw new ManifestError(issues);
   return m;
 }

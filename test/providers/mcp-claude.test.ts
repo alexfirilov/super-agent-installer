@@ -77,7 +77,7 @@ describe('restoring a user\'s own definition (Finding 9)', () => {
   });
   it('uninstall restores the recorded definition when the current one is still ours', async () => {
     const ctx = ctxWith({ exa: ours }, cmds);
-    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
+    ctx.state = { version: 1, installerVersion: '0.4.0', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
     const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(r.message).toMatch(/restored/);
     expect(ctx.calls).toContainEqual(['claude', 'mcp', 'remove', '-s', 'user', 'exa']);
@@ -86,7 +86,7 @@ describe('restoring a user\'s own definition (Finding 9)', () => {
   it('uninstall leaves a definition the user edited after us, and says so', async () => {
     const edited = { type: 'http', url: 'https://mcp.exa.ai/mcp', headers: { 'X-Added-Later': '1' } };
     const ctx = ctxWith({ exa: edited }, cmds);
-    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
+    ctx.state = { version: 1, installerVersion: '0.4.0', selectedIds: ['mcp-exa'], channel: 'latest', lastRun: 't', installed: { 'mcp-exa': { version: null, at: 't', byUs: true, previous: theirs } } };
     const r = await (await mcpClaudeProvider.plan(c, ctx, await mcpClaudeProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(r.changed).toBe(false); expect(r.message).toMatch(/left|kept|modified/i);
     expect(ctx.calls.some((a) => a.join(' ').startsWith('claude mcp remove'))).toBe(false);
@@ -94,7 +94,7 @@ describe('restoring a user\'s own definition (Finding 9)', () => {
 });
 
 describe('registry version bumps', () => {
-  const st = (installed: Record<string, unknown>) => ({ version: 1 as const, installerVersion: '0.4.0', profile: 'all' as const, selectedIds: ['mcp-n8n-mcp'], channel: 'latest' as const, lastRun: 't', installed: installed as never });
+  const st = (installed: Record<string, unknown>) => ({ version: 1 as const, installerVersion: '0.4.0', selectedIds: ['mcp-n8n-mcp'], channel: 'latest' as const, lastRun: 't', installed: installed as never });
   const launch = (v: string) => ({ type: 'stdio', command: 'npx', args: ['-y', `n8n-mcp@${v}`] });
   const c = mcp({ name: 'n8n-mcp', transport: 'stdio', command: 'npx', args: ['-y', 'n8n-mcp@2.92.1'], formerNames: ['n8n-mcp@2.87.0'] });
   it('rewriting our own older launch line is not a user value to restore later', async () => {

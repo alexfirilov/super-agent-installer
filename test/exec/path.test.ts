@@ -4,7 +4,7 @@ import type { HostInfo } from '../../src/types.js';
 const linux = { platform: 'linux', home: '/home/u' } as HostInfo;
 const windows = { platform: 'windows', home: 'C:\\Users\\u' } as HostInfo;
 describe('extendPath', () => {
-  it('prepends the install dirs once and keeps the existing PATH', () => {
+  it.skipIf(process.platform === 'win32')('prepends the install dirs once and keeps the existing PATH', () => {
     const env: Record<string, string | undefined> = { PATH: '/usr/bin:/bin' };
     const added = extendPath(linux, env);
     expect(added).toEqual(['/home/u/.local/bin', '/home/u/.local/share/fnm', '/home/u/.local/share/fnm/aliases/default/bin', '/home/u/go/bin', '/home/u/.local/go/bin', '/usr/local/bin']);
@@ -12,7 +12,7 @@ describe('extendPath', () => {
     expect(extendPath(linux, env)).toEqual([]);
     expect(env.PATH).toBe('/home/u/.local/bin:/home/u/.local/share/fnm:/home/u/.local/share/fnm/aliases/default/bin:/home/u/go/bin:/home/u/.local/go/bin:/usr/local/bin:/usr/bin:/bin');
   });
-  it('skips dirs already on PATH (trailing slash tolerant) and handles an empty PATH', () => {
+  it.skipIf(process.platform === 'win32')('skips dirs already on PATH (trailing slash tolerant) and handles an empty PATH', () => {
     const env: Record<string, string | undefined> = { PATH: '/usr/local/bin/:/home/u/.local/bin' };
     expect(extendPath(linux, env)).toEqual(['/home/u/.local/share/fnm', '/home/u/.local/share/fnm/aliases/default/bin', '/home/u/go/bin', '/home/u/.local/go/bin']);
     const empty: Record<string, string | undefined> = {};
@@ -35,7 +35,7 @@ describe('extendPath', () => {
     expect(env.PATH).toBe('C:\\Users\\u\\.local\\bin;C:\\Users\\u\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin;C:\\Users\\u\\AppData\\Roaming\\fnm\\aliases\\default;C:\\Program Files\\nodejs;C:\\Users\\u\\go\\bin;C:\\Users\\u\\AppData\\Roaming\\npm;C:\\Program Files\\Go\\bin;C:\\Users\\u\\AppData\\Local\\Programs\\Go\\bin;C:\\Users\\u\\scoop\\shims;C:\\Windows\\system32');
     expect(extendPath(windows, env)).toEqual([]);
   });
-  it('honours GOPATH for the go bin dir (go install puts gopls there; found by real-host apply)', () => {
+  it.skipIf(process.platform === 'win32')('honours GOPATH for the go bin dir (go install puts gopls there; found by real-host apply)', () => {
     expect(toolDirs(linux, { GOPATH: '/opt/gopath' })).toContain('/opt/gopath/bin');
     expect(toolDirs(linux, {})).toContain('/home/u/go/bin');
     expect(toolDirs(linux, {})).toContain('/home/u/.local/go/bin');

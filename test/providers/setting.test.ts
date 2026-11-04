@@ -55,13 +55,24 @@ describe('settingProvider', () => {
     await (await settingProvider.plan(c, win, null, 'install'))[0]!.run(win); expect(win.calls).toContainEqual(['git', 'config', '--global', 'core.symlinks', 'true']);
     const lin = makeTestCtx({ responses: base }); expect(await settingProvider.plan(c, lin, null, 'install')).toEqual([]);
   });
-  it('expands ${HOME} in codexToml keys and string values', async () => {
+  it.skipIf(process.platform === 'win32')('expands ${HOME} in codexToml keys and string values', async () => {
     const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.codexHome, { recursive: true }); writeFileSync(ctx.paths.codexConfig, 'model = "x"\n');
     const t = setting('set-trust-home', { target: 'codex', codexToml: { projects: { '${HOME}': { trust_level: 'trusted' } } } });
     await (await settingProvider.plan(t, ctx, null, 'install'))[0]!.run(ctx);
     const text = readFileSync(ctx.paths.codexConfig, 'utf8');
     expect(text).toContain(`[projects."${ctx.host.home}"]`);
     expect(await settingProvider.detect(t, ctx)).toEqual({ version: null });
+  });
+  it('owns only its own env key: the user\'s other env entries do not read as drift and survive uninstall', async () => {
+    const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ env: { MINE: '1' }, model: 'x' }));
+    const t = setting('set-env', { target: 'claude', claudeSettings: { env: { ENABLE_STOP_REVIEW: '0' } } });
+    expect(await settingProvider.detect(t, ctx)).toBeNull();
+    await (await settingProvider.plan(t, ctx, null, 'install'))[0]!.run(ctx);
+    expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8')).env).toEqual({ MINE: '1', ENABLE_STOP_REVIEW: '0' });
+    const inst = await settingProvider.detect(t, ctx); expect(inst).toEqual({ version: null });
+    await (await settingProvider.plan(t, ctx, inst, 'uninstall'))[0]!.run(ctx);
+    expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({ env: { MINE: '1' }, model: 'x' });
   });
   it('seeds ~/.claude.json only when absent', async () => {
     const ctx = makeTestCtx({ responses: base }); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });

@@ -54,7 +54,6 @@ export const codexPluginProvider: Provider = {
         return ok(`${id} ${r.version ?? ''} installed`);
       })];
     }
-    if (mode !== 'update') return [];
     if (await reservedButNotSignedIn(ctx, spec.marketplace)) return [skipAction(c.id, NOT_SIGNED_IN, 'codex-cli', { blocked: true })];
     return [action(c.id, 'update', `update ${id}`, async () => {
       await upgradeMarketplace(ctx, spec.marketplace);

@@ -4,6 +4,32 @@ import { hookProvider } from '../../src/providers/hook.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
 const hook = (agent: 'claude' | 'codex'): Component => ({ id: `hook-caveman-${agent}`, name: 'caveman hooks', kind: 'hook', agents: agent, platforms: ['linux', 'windows', 'darwin'], description: '', verdict: 'recommended', defaultSelected: agent === 'claude', spec: { kind: 'hook', provider: 'caveman', agent } });
+describe('caveman hook removal', () => {
+  const c: Component = { id: 'hook-caveman-claude', name: 'h', kind: 'hook', agents: 'claude', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: false, spec: { kind: 'hook', provider: 'caveman', agent: 'claude' } };
+  const settings = (ctx: ReturnType<typeof makeTestCtx>, command: string) => { mkdirSync(ctx.paths.claudeConfigDir, { recursive: true }); writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command }] }] } })); };
+  it('recognises the hook whichever way the CLI wired it', async () => {
+    for (const command of ["& 'C:/x/.caveman/bin/caveman-proxy.exe' native-hook claude --adapter y", "& 'C:/nodejs/node.exe' 'C:/npm/node_modules/@caveman-ai/cli/dist/native-hook-fast.js' native-hook claude"]) {
+      const ctx = makeTestCtx(); settings(ctx, command); expect(await hookProvider.detect(c, ctx), command).toEqual({ version: null });
+    }
+    const other = makeTestCtx(); settings(other, 'node my-own-hook.js'); expect(await hookProvider.detect(c, other)).toBeNull();
+  });
+  it('with the CLI gone, takes only caveman entries out of settings.json itself, so nothing calls a missing binary', async () => {
+    const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });
+    const mine = { hooks: [{ type: 'command', command: 'node my-own-hook.js' }] };
+    writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:8787/w/claude' }, hooks: { Stop: [mine, { hooks: [{ type: 'command', command: "'caveman-proxy' native-hook claude" }] }], SessionStart: [{ hooks: [{ type: 'command', command: "'caveman-proxy' native-hook claude" }] }] } }));
+    const r = await (await hookProvider.plan(c, ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(true);
+    const after = JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'));
+    expect(after.hooks).toEqual({ Stop: [mine] }); expect(after.env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+  it('fails when --remove exits 0 but the hooks are still there, so retirement retries', async () => {
+    const ctx = makeTestCtx({ responses: { 'caveman --version': '1.3.4', 'caveman setup --agent-native claude --remove': 'no agent-native bundle journal found' } });
+    settings(ctx, "'caveman-proxy' native-hook claude");
+    const r = await (await hookProvider.plan(c, ctx, { version: null }, 'uninstall'))[0]!.run(ctx);
+    expect(r.ok).toBe(false); expect(r.message).toMatch(/journal/);
+  });
+});
+
 describe('hookProvider', () => {
   it('detects caveman native hooks in settings.json', async () => {
     const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true });

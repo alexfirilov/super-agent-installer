@@ -8,43 +8,43 @@ import { action, skipAction } from '../../src/providers/types.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component, Manifest, Provider } from '../../src/types.js';
 const comp = (id: string, ok = true): Component => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'tool', probe: [id], packages: {} } });
-const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' }, minimal: { description: '', base: 'none', include: ['a'] } }, components: [comp('a'), comp('b')] };
+const manifest: Manifest = { version: 1, components: [comp('a'), comp('b')] };
 const fake = (fails: string[]): Provider => ({ kind: 'tool', detect: async () => null, latest: async () => '1', plan: async (c) => [action(c.id, 'install', `install ${c.id}`, async () => (fails.includes(c.id) ? { ok: false, changed: false, message: 'bad' } : { ok: true, changed: true, message: 'good' }), { to: '1' })] });
 describe('runInstall / runUpdate', () => {
   it('installs the profile, writes state, returns 1 when a step fails', async () => {
     clearProviders(); registerProvider(fake(['b']));
     const ctx = makeTestCtx({ manifest });
-    expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' })).toBe(1);
+    expect(await runInstall(ctx, { installerVersion: '0.1.0' })).toBe(1);
     const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')); expect(state.selectedIds).toEqual(['a', 'b']); expect(state.installed.a.version).toBe('1'); expect(state.installed.b).toBeUndefined();
   });
   it('dry-run plans without executing or writing state', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest, dryRun: true });
-    expect(await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0); expect(existsSync(ctx.paths.stateFile)).toBe(false);
+    expect(await runInstall(ctx, { installerVersion: '0.1.0' })).toBe(0); expect(existsSync(ctx.paths.stateFile)).toBe(false);
   });
   it('update replays the saved selection and calls self-update first', async () => {
     clearProviders(); registerProvider(fake([]));
-    const ctx = makeTestCtx({ manifest }); await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    const ctx = makeTestCtx({ manifest }); await runInstall(ctx, { installerVersion: '0.1.0' });
     let selfUpdated = false;
     expect(await runUpdate(ctx, { installerVersion: '0.1.0', selfUpdateFn: async () => { selfUpdated = true; return { updated: false, message: 'current' }; } })).toBe(0);
-    expect(selfUpdated).toBe(true); expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds).toEqual(['a']);
+    expect(selfUpdated).toBe(true); expect(JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds).toEqual(['a', 'b']);
   });
   it('warns loudly, without blocking, when installing on a Proxmox host or as root (Finding 14)', async () => {
     clearProviders(); registerProvider(fake([]));
     const pve = makeTestCtx({ manifest, host: { isProxmoxHost: true, isRoot: true } });
-    expect(await runInstall(pve, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0);
+    expect(await runInstall(pve, { installerVersion: '0.1.0' })).toBe(0);
     expect(pve.log.lines.some((l) => /WARN/.test(l) && /Proxmox hypervisor as root/.test(l) && /management VM/.test(l))).toBe(true);
     const root = makeTestCtx({ manifest, host: { isRoot: true } });
-    await runInstall(root, { profile: 'minimal', installerVersion: '0.1.0' });
+    await runInstall(root, { installerVersion: '0.1.0' });
     expect(root.log.lines.some((l) => /WARN/.test(l) && /as root/.test(l))).toBe(true);
     const user = makeTestCtx({ manifest });
-    await runInstall(user, { profile: 'minimal', installerVersion: '0.1.0' });
+    await runInstall(user, { installerVersion: '0.1.0' });
     expect(user.log.lines.some((l) => /WARN/.test(l) && /root|Proxmox/.test(l))).toBe(false);
   });
-  it('bails on NixOS with exit 4', async () => { clearProviders(); registerProvider(fake([])); const ctx = makeTestCtx({ manifest, host: { isNixOS: true } }); expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' })).toBe(4); });
+  it('bails on NixOS with exit 4', async () => { clearProviders(); registerProvider(fake([])); const ctx = makeTestCtx({ manifest, host: { isNixOS: true } }); expect(await runInstall(ctx, { installerVersion: '0.1.0' })).toBe(4); });
   it('update skips self-update under dry-run', async () => {
     clearProviders(); registerProvider(fake([]));
-    const ctx = makeTestCtx({ manifest, dryRun: true }); await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    const ctx = makeTestCtx({ manifest, dryRun: true }); await runInstall(ctx, { installerVersion: '0.1.0' });
     let selfUpdated = false;
     expect(await runUpdate(ctx, { installerVersion: '0.1.0', selfUpdateFn: async () => { selfUpdated = true; return { updated: true, message: 'would update' }; } })).toBe(0);
     expect(selfUpdated).toBe(false);
@@ -53,7 +53,7 @@ describe('runInstall / runUpdate', () => {
 
 // C1: a host without Claude/Codex/node must get agents AND their dependents in ONE run; --dry-run must execute nothing.
 const kinded = (id: string, kind: Component['kind'], spec: Component['spec'], extra: Partial<Component> = {}): Component => ({ id, name: id, kind, agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec, ...extra });
-const freshManifest: Manifest = { version: 1, profiles: { minimal: { description: '', base: 'none', include: ['claude-code', 'cp-x', 'mcp-y'] } }, components: [
+const freshManifest: Manifest = { version: 1, components: [
   kinded('claude-code', 'agent', { kind: 'agent', agent: 'claude' }),
   kinded('cp-x', 'claude-plugin', { kind: 'claude-plugin', marketplace: 'm', plugin: 'x' }, { secrets: [{ env: 'X_TOKEN', prompt: 'token for x', required: false }] }),
   kinded('mcp-y', 'mcp', { kind: 'mcp', target: 'claude', name: 'y', transport: 'http', url: 'https://y' }),
@@ -70,7 +70,7 @@ describe('runInstall on a fresh host', () => {
     clearProviders(); const f = registerFreshHost();
     const ctx = makeTestCtx({ manifest: freshManifest });
     const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
-    try { expect(await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
+    try { expect(await runInstall(ctx, { installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
     expect(f.ran).toEqual(['claude-code', 'cp-x', 'mcp-y']);
     const preview = logs[0] ?? ''; expect(preview).toContain('install (after claude-code)'); expect(preview).not.toContain('Claude Code not installed');
     const state = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')); expect(Object.keys(state.installed).sort()).toEqual(['claude-code', 'cp-x', 'mcp-y']);
@@ -80,7 +80,7 @@ describe('runInstall on a fresh host', () => {
     clearProviders(); const f = registerFreshHost();
     const ctx = makeTestCtx({ manifest: freshManifest, dryRun: true });
     const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };
-    try { expect(await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
+    try { expect(await runInstall(ctx, { installerVersion: '0.1.0' })).toBe(0); } finally { console.log = orig; }
     expect(f.ran).toEqual([]); expect(f.installed()).toBe(false); expect(existsSync(ctx.paths.stateFile)).toBe(false);
     expect(logs[0]).toContain('install (after claude-code)');
   });
@@ -88,7 +88,7 @@ describe('runInstall on a fresh host', () => {
 
 // Task 3: sign-in wiring in runInstall -- ensureAuth runs after the picker/plan preview and before promptSecrets,
 // only when not --dry-run and not --no-login, and only for agents this run's selection actually needs.
-const bothAgentsManifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [
+const bothAgentsManifest: Manifest = { version: 1, components: [
   kinded('claude-code', 'tool', { kind: 'tool', probe: ['claude-code'], packages: {} }, { agents: 'claude' }),
   kinded('codex-cli', 'tool', { kind: 'tool', probe: ['codex-cli'], packages: {} }, { agents: 'codex' }),
 ] };
@@ -96,36 +96,36 @@ describe('runInstall sign-in wiring', () => {
   it('signs both agents in when both agent components are selected and stores the result on ctx.auth', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest: bothAgentsManifest, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
     expect(ctx.auth?.codex).toMatchObject({ authenticated: true, mode: 'chatgpt' });
   });
   it('does not sign in an agent that nothing in the selection needs', async () => {
     clearProviders(); registerProvider(fake([]));
-    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('mcp-y', 'tool', { kind: 'tool', probe: ['y'], packages: {} }, { agents: 'claude' })] };
+    const manifest: Manifest = { version: 1, components: [kinded('mcp-y', 'tool', { kind: 'tool', probe: ['y'], packages: {} }, { agents: 'claude' })] };
     const ctx = makeTestCtx({ manifest });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.auth).toBeUndefined();
     expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
   });
   it('signs claude in when a claude-targeted component is selected and claude is already installed (not part of this run)', async () => {
     clearProviders(); registerProvider(fake([]));
-    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
+    const manifest: Manifest = { version: 1, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
     const ctx = makeTestCtx({ manifest, responses: { 'claude --version': 'claude 2.0.0', 'claude auth status': 'Logged in as demo@example.com' } });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
   });
   it('never signs in during --dry-run', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest: bothAgentsManifest, dryRun: true, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.auth).toBeUndefined();
     expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
   });
   it('never signs in when --no-login is passed, even outside --dry-run', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest: bothAgentsManifest, responses: { 'claude auth status': 'Logged in as demo@example.com', 'codex login status': 'Logged in using ChatGPT' } });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true });
+    await runInstall(ctx, { installerVersion: '0.1.0', noLogin: true });
     expect(ctx.auth).toBeUndefined();
     expect(ctx.calls.some((a) => a.join(' ').includes('auth status') || a.join(' ').includes('login status'))).toBe(false);
   });
@@ -134,10 +134,10 @@ describe('runInstall sign-in wiring', () => {
 // Task 5: persist everything in ctx.secrets (including a captured token that never went through promptSecrets)
 // once, after promptSecrets, unless --dry-run or --no-persist-secrets.
 describe('runInstall secret persistence wiring', () => {
-  it('persists everything in ctx.secrets, including a pre-captured token, and records the result on ctx.secretsPersist', async () => {
+  it.skipIf(process.platform === 'win32')('persists everything in ctx.secrets, including a pre-captured token, and records the result on ctx.secretsPersist', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
-    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.secretsPersist?.persisted).toEqual(['CLAUDE_CODE_OAUTH_TOKEN']);
     expect(readFileSync(join(ctx.paths.stateDir, 'secrets.env'), 'utf8')).toContain("export CLAUDE_CODE_OAUTH_TOKEN='captured-token'");
     const profileText = readFileSync(join(ctx.host.home, '.profile'), 'utf8');
@@ -147,14 +147,14 @@ describe('runInstall secret persistence wiring', () => {
   it('--no-persist-secrets skips persistence entirely', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
-    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0', noPersistSecrets: true });
+    await runInstall(ctx, { installerVersion: '0.1.0', noPersistSecrets: true });
     expect(ctx.secretsPersist).toBeUndefined();
     expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
   });
   it('--dry-run never persists secrets', async () => {
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest, dryRun: true, secrets: { CLAUDE_CODE_OAUTH_TOKEN: 'captured-token' } });
-    await runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' });
+    await runInstall(ctx, { installerVersion: '0.1.0' });
     expect(ctx.secretsPersist).toBeUndefined();
     expect(existsSync(join(ctx.host.home, '.profile'))).toBe(false);
   });
@@ -181,7 +181,7 @@ describe('runInstall sign-in ordering (C1)', () => {
       }
       return base(argv, opts);
     };
-    const { code } = await quietLogs(() => runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' }));
+    const { code } = await quietLogs(() => runInstall(ctx, { installerVersion: '0.1.0' }));
     expect(code).toBe(0);
     expect(ranAtAuth).toEqual(['claude-code']); // after the agent installed, before cp-x / mcp-y
     expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
@@ -192,14 +192,14 @@ describe('runInstall sign-in ordering (C1)', () => {
     let persistedAtMcpPlan: boolean | null = null;
     registerProvider({ kind: 'mcp', detect: async () => null, plan: async (c, ctx) => { persistedAtMcpPlan = ctx.secretsPersist !== undefined; return [action(c.id, 'install', `install ${c.id}`, async () => { f.ran.push(c.id); return { ok: true, changed: true, message: 'done' }; })]; } });
     const ctx = makeTestCtx({ manifest: freshManifest, secrets: { X_TOKEN: 'typed' }, responses: { 'claude auth status': 'Logged in as demo@example.com' } });
-    await quietLogs(() => runInstall(ctx, { profile: 'minimal', installerVersion: '0.1.0' }));
+    await quietLogs(() => runInstall(ctx, { installerVersion: '0.1.0' }));
     expect(persistedAtMcpPlan).toBe(true);
   });
-  it('still runs the block when no agent-kind component is selected', async () => {
+  it.skipIf(process.platform === 'win32')('still runs the block when no agent-kind component is selected', async () => {
     clearProviders(); registerProvider(fake([]));
-    const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
+    const manifest: Manifest = { version: 1, components: [kinded('cp-x', 'tool', { kind: 'tool', probe: ['x'], packages: {} }, { agents: 'claude' })] };
     const ctx = makeTestCtx({ manifest, secrets: { X_TOKEN: 'typed' }, responses: { 'claude --version': 'claude 2.0.0', 'claude auth status': 'Logged in as demo@example.com' } });
-    await quietLogs(() => runInstall(ctx, { profile: 'all', installerVersion: '0.1.0' }));
+    await quietLogs(() => runInstall(ctx, { installerVersion: '0.1.0' }));
     expect(ctx.auth?.claude).toMatchObject({ authenticated: true });
     expect(ctx.secretsPersist?.persisted).toEqual(['X_TOKEN']);
   });
@@ -208,17 +208,17 @@ describe('runInstall sign-in ordering (C1)', () => {
 // M3: D1 requires an auth failure to reach the exit code. An auth-blocked skip is not an ordinary skip.
 describe('runInstall exit code for auth-blocked components', () => {
   it('returns 2 when a component was skipped because its agent is not signed in, and 0 for ordinary skips', async () => {
-    const blockedManifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [kinded('cx-x', 'codex-plugin', { kind: 'codex-plugin', marketplace: 'openai-curated-remote', marketplaceSource: 'reserved', plugin: 'x' })] };
+    const blockedManifest: Manifest = { version: 1, components: [kinded('cx-x', 'codex-plugin', { kind: 'codex-plugin', marketplace: 'openai-curated-remote', marketplaceSource: 'reserved', plugin: 'x' })] };
     clearProviders();
     registerProvider({ kind: 'codex-plugin', detect: async () => null, plan: async (c) => [skipAction(c.id, 'Codex is not signed in (remote catalog needs a ChatGPT login)', 'codex-cli', { blocked: true })] });
     const ctx = makeTestCtx({ manifest: blockedManifest });
     const orig = console.log; console.log = () => {};
-    try { expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true })).toBe(2); } finally { console.log = orig; }
+    try { expect(await runInstall(ctx, { installerVersion: '0.1.0', noLogin: true })).toBe(2); } finally { console.log = orig; }
     clearProviders();
     registerProvider({ kind: 'codex-plugin', detect: async () => null, plan: async (c) => [skipAction(c.id, 'nothing to do', 'codex-cli')] });
     const plain = makeTestCtx({ manifest: blockedManifest });
     const orig2 = console.log; console.log = () => {};
-    try { expect(await runInstall(plain, { profile: 'all', installerVersion: '0.1.0', noLogin: true })).toBe(0); } finally { console.log = orig2; }
+    try { expect(await runInstall(plain, { installerVersion: '0.1.0', noLogin: true })).toBe(0); } finally { console.log = orig2; }
   });
 });
 
@@ -228,7 +228,7 @@ describe('partial runs do not shrink the saved selection', () => {
     // update, check and uninstall forever -- the host quietly stopped being managed.
     clearProviders(); registerProvider(fake([]));
     const ctx = makeTestCtx({ manifest });
-    await runInstall(ctx, { profile: 'all', installerVersion: '0.1.0', noLogin: true });
+    await runInstall(ctx, { installerVersion: '0.1.0', noLogin: true });
     const full = JSON.parse(readFileSync(ctx.paths.stateFile, 'utf8')).selectedIds as string[];
     expect(full).toEqual(['a', 'b']);
     await runInstall(ctx, { only: ['a'], installerVersion: '0.1.0', noLogin: true });

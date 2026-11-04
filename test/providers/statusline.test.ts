@@ -41,7 +41,7 @@ describe('restoring the user\'s own statusLine (Finding 9)', () => {
     const ctx = makeTestCtx(); mkdirSync(ctx.paths.claudeConfigDir, { recursive: true }); writeFileSync(ctx.paths.claudeSettings, JSON.stringify({ statusLine: theirs, model: 'opus' }));
     const r = await (await statuslineProvider.plan(sl('caveman'), ctx, null, 'install'))[0]!.run(ctx);
     expect(r.previous).toEqual(theirs);
-    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['sl-caveman'], channel: 'latest', lastRun: 't', installed: { 'sl-caveman': { version: null, at: 't', byUs: true, previous: theirs } } };
+    ctx.state = { version: 1, installerVersion: '0.4.0', selectedIds: ['sl-caveman'], channel: 'latest', lastRun: 't', installed: { 'sl-caveman': { version: null, at: 't', byUs: true, previous: theirs } } };
     const u = await (await statuslineProvider.plan(sl('caveman'), ctx, await statuslineProvider.detect(sl('caveman'), ctx), 'uninstall'))[0]!.run(ctx);
     expect(u.ok).toBe(true); expect(u.message).toMatch(/restored/);
     expect(JSON.parse(readFileSync(ctx.paths.claudeSettings, 'utf8'))).toEqual({ statusLine: theirs, model: 'opus' });

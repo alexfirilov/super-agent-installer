@@ -1,5 +1,5 @@
 name: ci
-on: { push: { branches: [main] }, pull_request: {} }
+on: { push: { branches: [master] }, pull_request: {} }
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -16,6 +16,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx vitest run
       - shell: pwsh
         run: Install-Module Pester -Force -SkipPublisherCheck; Install-Module PSScriptAnalyzer -Force; Invoke-Pester -Path test/bootstrap/install.Tests.ps1 -CI
       - shell: powershell

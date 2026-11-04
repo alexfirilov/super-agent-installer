@@ -9,6 +9,15 @@ import { action, ok, fail, skipAction } from './types.js';
 const deepEq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function getPath(o: unknown, path: string[]): unknown { let cur = o; for (const k of path) { if (!cur || typeof cur !== 'object') return undefined; cur = (cur as Record<string, unknown>)[k]; } return cur; }
 function leaves(o: Record<string, unknown>, prefix: string[] = []): Array<{ path: string[]; value: unknown }> { return Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? leaves(v as Record<string, unknown>, [...prefix, k]) : [{ path: [...prefix, k], value: v }])); }
+/** `cur` minus the values `owned` set, key by key: `env` is shared with the user's own entries and other settings. An object this empties goes too. */
+function withoutLeaves(cur: Record<string, unknown>, owned: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...cur };
+  for (const [k, v] of Object.entries(owned)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && cur[k] && typeof cur[k] === 'object') { const inner = withoutLeaves(cur[k] as Record<string, unknown>, v as Record<string, unknown>); if (Object.keys(inner).length) next[k] = inner; else delete next[k]; }
+    else if (v !== null && deepEq(cur[k], v)) delete next[k];
+  }
+  return next;
+}
 function expandHome(v: unknown, home: string): unknown {
   if (typeof v === 'string') return v.replace(/\$\{HOME\}/g, home);
   if (Array.isArray(v)) return v.map((x) => expandHome(x, home));
@@ -22,7 +31,7 @@ export const settingProvider: Provider = {
   async detect(c, ctx) {
     if (c.spec.kind !== 'setting') return null; const s = c.spec;
     if (s.windowsGitConfig && ctx.host.platform !== 'windows') return null;
-    if (s.claudeSettings) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; for (const [k, v] of Object.entries(s.claudeSettings)) { if (v === null ? k in cur : !deepEq(cur[k], v)) return null; } }
+    if (s.claudeSettings) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; for (const l of leaves(s.claudeSettings)) { const have = getPath(cur, l.path); if (l.value === null ? have !== undefined : !deepEq(have, l.value)) return null; } }
     if (s.claudeJsonSeed && !(await fileExists(ctx.paths.claudeJson))) return null;
     if (s.codexFeatures || s.codexToml) {
       const cfg = await readToml(ctx.paths.codexConfig);
@@ -41,7 +50,7 @@ export const settingProvider: Provider = {
     if (mode === 'uninstall') {
       if (!installed) return [];
       return [action(c.id, 'uninstall', `revert ${c.name}`, async () => {
-        if (s.claudeSettings) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const next = { ...cur }; for (const [k, v] of Object.entries(s.claudeSettings)) if (v !== null && deepEq(cur[k], v)) delete next[k]; if (!ctx.dryRun) { await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir); await writeJsonAtomic(ctx.paths.claudeSettings, next); } }
+        if (s.claudeSettings) { const cur = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const next = withoutLeaves(cur, s.claudeSettings); if (!ctx.dryRun) { await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir); await writeJsonAtomic(ctx.paths.claudeSettings, next); } }
         const featureFailures: string[] = [];
         for (const [k, v] of Object.entries(s.codexFeatures ?? {})) {
           const op = v ? 'disable' : 'enable';

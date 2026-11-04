@@ -11,7 +11,7 @@ import { removePersistedSecrets } from '../secrets/persist.js';
  * Uninstall removes only what this installer put on the host.
  *
  * On 2026-09-19 a bare `uninstall --yes` on a real workstation removed the host's pre-existing git, jq, ripgrep, gh
- * and go -- none of which we installed -- because the target list came from `selectedIds` (everything the profile
+ * and go -- none of which we installed -- because the target list came from `selectedIds` (everything
  * SELECTED) rather than from what we actually installed. apt then removed 150 further packages that depended on
  * them, including the whole desktop. Two guards now stand in the way: provenance (`byUs`), and the refusal to treat
  * a bare `uninstall --yes` as "remove everything".
@@ -19,7 +19,7 @@ import { removePersistedSecrets } from '../secrets/persist.js';
 export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { json?: boolean; installerVersion: string; force?: boolean; all?: boolean; channel?: Channel }): Promise<number> {
   const state = await readState(ctx.paths.stateFile);
   ctx.state = state; // providers restore `previous` values from it
-  ctx.channel = resolveChannel(o.channel, state, state && state.profile !== 'saved' ? ctx.manifest.profiles[state.profile] : undefined); // the brew cask name depends on it
+  ctx.channel = resolveChannel(o.channel, state); // the brew cask name depends on it
   // Ours only when the record proves it. No record at all (no state file, a v0.2 state, an id that was never
   // selected) is UNKNOWN provenance and is treated as foreign: the provider would still detect the host's own copy
   // and remove it, which is exactly the 2026-09-19 incident again. The refusal is decided after planning, from the
@@ -38,7 +38,7 @@ export async function runUninstall(ctx: Ctx, ids: string[] | undefined, o: { jso
   }
   if (!target.length) { ctx.log.error('nothing to uninstall: pass component ids or install first'); return 1; }
   // explicit ids only: never widen to the prerequisite closure (uninstall sk-x must not remove node)
-  const resolved = resolveSelection(ctx.manifest, ctx.host, { profile: 'saved', savedIds: target });
+  const resolved = resolveSelection(ctx.manifest, ctx.host, { savedIds: target });
   // no registry lookups: `{{version}}` is filled with what the host was last converged to (else the pin), so an MCP
   // entry is still recognised as the one we wrote
   const wanted = new Set(target); const sel = { ...resolved, components: (await resolveVersions(resolved.components.filter((c) => wanted.has(c.id)), ctx, { pinsOnly: true, recorded: (id) => state?.installed[id]?.versions })).components };

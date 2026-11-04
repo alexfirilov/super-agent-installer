@@ -36,7 +36,7 @@ describe('persistSecrets on Windows', () => {
   });
 });
 
-describe('persistSecrets on POSIX', () => {
+describe.skipIf(process.platform === 'win32')('persistSecrets on POSIX', () => {
   it('writes the secret into a dedicated 0600 file under stateDir, never into ~/.profile, and is idempotent', async () => {
     const ctx = makeTestCtx();
     const profilePath = join(ctx.host.home, '.profile');

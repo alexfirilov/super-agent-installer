@@ -14,7 +14,7 @@ import type { Component, Manifest, Provider } from '../../src/types.js';
  * run is ADOPTED (detected, recorded, managed) but never removed; unknown provenance is treated the same way.
  */
 const comp = (id: string): Component => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'tool', probe: [id], packages: {} } });
-const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [comp('a'), comp('b')] };
+const manifest: Manifest = { version: 1, components: [comp('a'), comp('b')] };
 /** A fake host: `present` is the set of tools on disk. install adds, uninstall removes, update bumps the version. */
 function fakeHost(present: Set<string>): Provider {
   return {
@@ -35,7 +35,7 @@ describe('uninstall ownership: created vs adopted', () => {
   it('case A: a tool absent before install is created by us, and uninstall removes it', async () => {
     const present = new Set<string>(); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.4.0' })).toBe(0);
+    expect(await runInstall(ctx, { installerVersion: '0.4.0' })).toBe(0);
     expect(present.has('a')).toBe(true); expect(state(ctx).installed.a.byUs).toBe(true);
     expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(0);
     expect(present.has('a')).toBe(false);
@@ -43,7 +43,7 @@ describe('uninstall ownership: created vs adopted', () => {
   it('case B: a tool that already existed is adopted, and uninstall leaves the software in place', async () => {
     const present = new Set(['a', 'b']); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.4.0' })).toBe(0);
+    expect(await runInstall(ctx, { installerVersion: '0.4.0' })).toBe(0);
     expect(state(ctx).installed.a.byUs).toBe(false);
     expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(1); // refused
     expect(present.has('a')).toBe(true);
@@ -53,7 +53,7 @@ describe('uninstall ownership: created vs adopted', () => {
   it('case C: mixed host -- uninstall --all removes only what we created', async () => {
     const present = new Set(['b']); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.4.0' })).toBe(0);
+    expect(await runInstall(ctx, { installerVersion: '0.4.0' })).toBe(0);
     expect(present).toEqual(new Set(['a', 'b']));
     expect(await runUninstall(ctx, undefined, { installerVersion: '0.4.0', all: true })).toBe(0);
     expect(present).toEqual(new Set(['b'])); // a (ours) gone, b (theirs) kept
@@ -63,7 +63,7 @@ describe('uninstall ownership: created vs adopted', () => {
     const present = new Set(['a', 'b']); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
     mkdirSync(dirname(ctx.paths.stateFile), { recursive: true });
-    writeFileSync(ctx.paths.stateFile, JSON.stringify({ version: 1, installerVersion: '0.2.0', profile: 'all', selectedIds: ['a', 'b'], channel: 'latest', installed: { a: { version: '1', at: 't' }, b: { version: '1', at: 't' } }, lastRun: 't' }));
+    writeFileSync(ctx.paths.stateFile, JSON.stringify({ version: 1, installerVersion: '0.2.0', selectedIds: ['a', 'b'], channel: 'latest', installed: { a: { version: '1', at: 't' }, b: { version: '1', at: 't' } }, lastRun: 't' }));
     expect(await runUninstall(ctx, undefined, { installerVersion: '0.4.0', all: true })).toBe(1);
     expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(1);
     expect(present).toEqual(new Set(['a', 'b']));
@@ -79,7 +79,7 @@ describe('uninstall ownership: created vs adopted', () => {
   it('case D3: a tool that was never selected (no record) but is on the host is refused too', async () => {
     const present = new Set(['b']); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', only: ['a'], installerVersion: '0.4.0' })).toBe(0); // b never in the selection
+    expect(await runInstall(ctx, { only: ['a'], installerVersion: '0.4.0' })).toBe(0); // b never in the selection
     expect(state(ctx).installed.b).toBeUndefined();
     expect(await runUninstall(ctx, ['b'], { installerVersion: '0.4.0' })).toBe(1);
     expect(present.has('b')).toBe(true);
@@ -90,14 +90,14 @@ describe('uninstall ownership: created vs adopted', () => {
     const present = new Set<string>(); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
     mkdirSync(dirname(ctx.paths.stateFile), { recursive: true });
-    writeFileSync(ctx.paths.stateFile, JSON.stringify({ version: 1, installerVersion: '0.3.0', profile: 'all', selectedIds: ['a'], channel: 'latest', installed: {}, lastRun: 't' }));
+    writeFileSync(ctx.paths.stateFile, JSON.stringify({ version: 1, installerVersion: '0.3.0', selectedIds: ['a'], channel: 'latest', installed: {}, lastRun: 't' }));
     expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(0);
     expect(state(ctx).selectedIds).toEqual([]);
   });
   it('case E: updating an adopted tool does not make it ours', async () => {
     const present = new Set(['a', 'b']); clearProviders(); registerProvider(fakeHost(present));
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', installerVersion: '0.4.0' })).toBe(0);
+    expect(await runInstall(ctx, { installerVersion: '0.4.0' })).toBe(0);
     expect(await runUpdate(ctx, { installerVersion: '0.4.0' })).toBe(0);
     expect(state(ctx).installed.a.byUs).toBe(false); // update changed it, provenance unchanged
     expect(await runUninstall(ctx, undefined, { installerVersion: '0.4.0', all: true })).toBe(1);
@@ -118,7 +118,7 @@ describe('restore wiring through the commands (Finding 9)', () => {
       },
     });
     const ctx = makeTestCtx({ manifest }); ctx.yes = true;
-    expect(await runInstall(ctx, { profile: 'all', only: ['a'], installerVersion: '0.4.0' })).toBe(0);
+    expect(await runInstall(ctx, { only: ['a'], installerVersion: '0.4.0' })).toBe(0);
     expect(state(ctx).installed.a).toMatchObject({ byUs: true, previous: { v: 'theirs' } });
     expect(await runUninstall(ctx, ['a'], { installerVersion: '0.4.0' })).toBe(0);
     expect(seenPrevious).toEqual([{ v: 'theirs' }]);

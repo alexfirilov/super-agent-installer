@@ -217,7 +217,7 @@ describe('toolProvider', () => {
     await (await toolProvider.plan(c, ctx, null, 'install'))[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['go', 'install', 'golang.org/x/tools/gopls@latest']);
   });
-  it('go install puts GOPATH/bin on PATH for the rest of the run instead of telling the user to do it', async () => {
+  it.skipIf(process.platform === 'win32')('go install puts GOPATH/bin on PATH for the rest of the run instead of telling the user to do it', async () => {
     // GCE QA: the old message asked the user to `export PATH="$HOME/go/bin:$PATH"` themselves, so gopls was installed
     // but invisible to the LSP plugin in any later shell -- leftover work the one-shot criterion forbids.
     const savedPath = process.env.PATH;
@@ -248,7 +248,7 @@ describe('toolProvider', () => {
     expect(r.ok).toBe(true);
     expect(ctx.calls).toContainEqual(['sh', '-c', 'echo hi']);
   });
-  it('installs with --prefix ~/.local when the npm global prefix is not writable (no persistent npm config), and plainly when it is (I8)', async () => {
+  it.skipIf(process.platform === 'win32')('installs with --prefix ~/.local when the npm global prefix is not writable (no persistent npm config), and plainly when it is (I8)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sai-npm-'));
     const unwritable = join(dir, 'notadir'); writeFileSync(unwritable, ''); // <prefix>/lib/node_modules cannot exist under a file -> not writable
     const ctx = makeTestCtx({ responses: { 'npm config get prefix': unwritable } });

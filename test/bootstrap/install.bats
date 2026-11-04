@@ -16,8 +16,8 @@ EOF
   export SAI_TEST_UNAME_S=Linux SAI_TEST_UNAME_M=x86_64
 }
 @test "downloads, verifies, installs and execs the binary" {
-  run bash "$BATS_TEST_DIRNAME/../../install.sh" --profile minimal --yes
-  [ "$status" -eq 0 ]; [[ "$output" == *"fake binary args: --profile minimal --yes"* ]]
+  run bash "$BATS_TEST_DIRNAME/../../install.sh" --no-login --yes
+  [ "$status" -eq 0 ]; [[ "$output" == *"fake binary args: --no-login --yes"* ]]
   [ -x "$SAI_INSTALL_DIR/super-agent-installer" ]
 }
 @test "refuses sudo from a user" {
@@ -36,7 +36,7 @@ EOF
 }
 @test "does not leak the temp download dir on a normal run" {
   export TMPDIR="$TMP/tmpdir"; mkdir -p "$TMPDIR"
-  run bash "$BATS_TEST_DIRNAME/../../install.sh" --profile minimal --yes
+  run bash "$BATS_TEST_DIRNAME/../../install.sh" --no-login --yes
   [ "$status" -eq 0 ]
   [ -z "$(ls -A "$TMPDIR")" ]
 }
@@ -76,9 +76,9 @@ EOF
   # /dev/tty exists as a device node inside containers but cannot be opened. `exec < /dev/tty` failing on that made
   # dash abort the whole script (exit 2) right after installing -- the binary never ran. setsid drops the terminal.
   command -v setsid >/dev/null || skip "setsid not available"
-  run setsid -w sh -c "cat '$BATS_TEST_DIRNAME/../../install.sh' | sh -s -- --profile minimal --yes" < /dev/null
+  run setsid -w sh -c "cat '$BATS_TEST_DIRNAME/../../install.sh' | sh -s -- --no-login --yes" < /dev/null
   [ "$status" -eq 0 ]
-  [[ "$output" == *"fake binary args: --profile minimal --yes"* ]]
+  [[ "$output" == *"fake binary args: --no-login --yes"* ]]
   run setsid -w bash -c "cat '$BATS_TEST_DIRNAME/../../install.sh' | bash -s -- --yes" < /dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"fake binary args: --yes"* ]]

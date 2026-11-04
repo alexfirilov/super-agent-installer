@@ -11,7 +11,7 @@ import type { Component, Manifest, Provider } from '../../src/types.js';
 /** Finding 6: `update` returned right after updating the installer itself, so the components waited for a second
  * run; and blocked components (agent never signed in) counted as success. */
 const comp = (id: string): Component => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'tool', probe: [id], packages: {} } });
-const manifest: Manifest = { version: 1, profiles: { all: { description: '', base: 'all' } }, components: [comp('a'), comp('b')] };
+const manifest: Manifest = { version: 1, components: [comp('a'), comp('b')] };
 type Behavior = 'update' | 'fail' | 'blocked' | 'current';
 function fake(b: Record<string, Behavior>): { provider: Provider; ran: string[] } {
   const ran: string[] = [];
@@ -32,7 +32,7 @@ function fake(b: Record<string, Behavior>): { provider: Provider; ran: string[] 
   };
   return { provider, ran };
 }
-const installed = async (behaviour: Record<string, Behavior>) => { const f = fake(behaviour); clearProviders(); registerProvider(f.provider); const ctx = makeTestCtx({ manifest }); await runInstall(ctx, { profile: 'all', installerVersion: '0.4.0' }); return { ctx, ...f }; };
+const installed = async (behaviour: Record<string, Behavior>) => { const f = fake(behaviour); clearProviders(); registerProvider(f.provider); const ctx = makeTestCtx({ manifest }); await runInstall(ctx, { installerVersion: '0.4.0' }); return { ctx, ...f }; };
 
 describe('runUpdate', () => {
   it('self-update available + component updates: re-executes the new binary with --no-self-update and returns its exit code, without running the components itself', async () => {

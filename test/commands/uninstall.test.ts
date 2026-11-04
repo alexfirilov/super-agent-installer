@@ -9,7 +9,7 @@ import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component, HostState, Manifest, Provider } from '../../src/types.js';
 
 const comp = (id: string): Component => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'must-have', defaultSelected: true, spec: { kind: 'tool', probe: [id], packages: {} } });
-const manifest: Manifest = { version: 1, profiles: {}, components: [comp('a'), comp('b'), comp('c')] };
+const manifest: Manifest = { version: 1, components: [comp('a'), comp('b'), comp('c')] };
 
 // behavior: 'ok' -> installed, uninstall succeeds; 'fail' -> installed, uninstall fails; 'absent' -> never installed (detect null, planner auto-skips)
 const fakeProvider = (behavior: Record<string, 'ok' | 'fail' | 'absent'>): Provider => ({
@@ -24,7 +24,7 @@ const fakeProvider = (behavior: Record<string, 'ok' | 'fail' | 'absent'>): Provi
 // Entries default to byUs:true -- these fixtures describe components the installer put there, which is what the
 // pre-provenance tests always meant. Tests about pre-existing host software pass byUs:false explicitly.
 const initialState = (selectedIds: string[], installed: HostState['installed']): HostState => ({
-  version: 1, installerVersion: '0.1.0', profile: 'all', selectedIds, channel: 'latest', lastRun: 't',
+  version: 1, installerVersion: '0.1.0', selectedIds, channel: 'latest', lastRun: 't',
   installed: Object.fromEntries(Object.entries(installed).map(([k, v]) => [k, { ...v, byUs: v.byUs ?? true }])),
 });
 
@@ -66,7 +66,7 @@ describe('runUninstall', () => {
   it('uninstall <id> removes only the named component, never its prerequisites (uninstall sk-x must not plan removing node)', async () => {
     clearProviders(); registerProvider(fakeProvider({ node: 'ok', 'sk-x': 'ok' }));
     registerProvider({ ...fakeProvider({ node: 'ok', 'sk-x': 'ok' }), kind: 'skill' });
-    const chain: Manifest = { version: 1, profiles: {}, components: [comp('node'), { ...comp('sk-x'), kind: 'skill', prerequisites: ['node'], spec: { kind: 'skill', repo: 'a/b', skills: ['x'], targets: ['codex'] } }] };
+    const chain: Manifest = { version: 1, components: [comp('node'), { ...comp('sk-x'), kind: 'skill', prerequisites: ['node'], spec: { kind: 'skill', repo: 'a/b', skills: ['x'], targets: ['codex'] } }] };
     const ctx = makeTestCtx({ manifest: chain }); ctx.yes = true;
     await writeState(ctx.paths.stateFile, initialState(['node', 'sk-x'], { node: { version: '1', at: 't' }, 'sk-x': { version: '1', at: 't' } }));
     const logs: string[] = []; const orig = console.log; console.log = (m: string) => { logs.push(String(m)); };

@@ -6,8 +6,6 @@ export const KINDS = ['agent', 'claude-plugin', 'codex-plugin', 'skill', 'mcp', 
 export type Kind = (typeof KINDS)[number];
 export const SLOTS = ['statusline', 'bash-rewriter', 'api-proxy', 'memory', 'methodology', 'browser', 'codex-notify', 'codex-hooks-writer'] as const;
 export type Slot = (typeof SLOTS)[number];
-export const PROFILE_NAMES = ['all', 'minimal', 'devops', 'claude-only', 'codex-only', 'work', 'homelab', 'proxmox-host'] as const;
-export type ProfileName = (typeof PROFILE_NAMES)[number];
 export type Verdict = 'must-have' | 'recommended' | 'optional';
 export type Channel = 'latest' | 'stable';
 
@@ -43,7 +41,7 @@ export type Spec = AgentSpec | ClaudePluginSpec | CodexPluginSpec | SkillSpec | 
 export interface VersionSource { registry: 'npm' | 'pypi' | 'go'; package: string; pin: string; major?: number }
 export interface Component {
   id: string; name: string; kind: Kind; agents: AgentTarget; platforms: Platform[]; description: string; verdict: Verdict;
-  defaultSelected: boolean; forceOffInAll?: boolean; profiles?: Partial<Record<ProfileName, boolean>>;
+  defaultSelected: boolean;
   prerequisites?: string[]; dependsOn?: string[]; conflictsWith?: string[]; slot?: Slot;
   contextCostTokens?: { claude?: number; codex?: number };
   popularity?: { stars?: number; installs?: number; downloadsWeekly?: number; observedAt: string };
@@ -52,10 +50,10 @@ export interface Component {
   postInstallHint?: string; source?: string; spec: Spec;
   versions?: Record<string, VersionSource>;
 }
-/** `channel`: the release channel a profile installs on when neither `--channel` nor a saved state names one (see `resolveChannel`). */
-export interface Profile { description: string; base: 'all' | 'none'; include?: string[]; exclude?: string[]; agentFilter?: 'claude' | 'codex'; channel?: Channel }
 /** `minInstallerVersion`: the oldest installer that understands this catalog; an older one falls back to its bundled copy. */
-export interface Manifest { version: 1; minInstallerVersion?: string; profiles: Partial<Record<ProfileName, Profile>>; components: Component[] }
+/** A component dropped from the catalog, kept so hosts that have it can remove it (see `commands/retire.ts`). `replacedBy`: the component a saved selection moves to. */
+export type RetiredComponent = Component & { replacedBy?: string };
+export interface Manifest { version: 1; minInstallerVersion?: string; components: Component[]; retired?: RetiredComponent[] }
 
 export type PkgManager = 'apt' | 'dnf' | 'yum' | 'pacman' | 'zypper' | 'apk' | 'brew' | 'winget' | 'scoop' | 'choco' | 'nix' | null;
 export interface HostInfo {
@@ -114,10 +112,11 @@ export type Op = 'install' | 'update' | 'skip' | 'uninstall' | 'disable' | 'conf
 export interface ActionResult { ok: boolean; message: string; changed: boolean; blocked?: boolean; previous?: unknown }
 export interface Action { id: string; componentId: string; op: Op; description: string; from?: string | null; to?: string | null; blockedBy?: string[]; run: (ctx: Ctx) => Promise<ActionResult> }
 export type Mode = 'install' | 'update' | 'uninstall';
-export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
-export interface Selection { profile: ProfileName | 'saved'; components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
+/** `stale`: for components with no comparable version: whether upstream has moved on, or null when that cannot be told. */
+export interface Provider { kind: Kind; detect(c: Component, ctx: Ctx): Promise<Installed | null>; latest?(c: Component, ctx: Ctx): Promise<string | null>; stale?(c: Component, ctx: Ctx): Promise<boolean | null>; plan(c: Component, ctx: Ctx, installed: Installed | null, mode: Mode): Promise<Action[]> }
+export interface Selection { components: Component[]; excluded: Array<{ id: string; reason: string }>; tokenTotals: { claude: number; codex: number }; codexMcpCount: number }
 export interface StepRecord { componentId: string; op: Op; ok: boolean; changed: boolean; message: string; blocked?: boolean; from?: string | null; to?: string | null; previous?: unknown }
 /** `previous`: the foreign value the last configure replaced (see `ActionResult.previous`); absent when we created the entry from nothing. */
 /** `versions`: the `{{key}}` values this host was last converged to, so uninstall can recognise the entries it wrote. */
 export interface InstalledRecord { version: string | null; at: string; byUs?: boolean; previous?: unknown; versions?: Record<string, string> }
-export interface HostState { version: 1; installerVersion: string; profile: ProfileName | 'saved'; selectedIds: string[]; channel: Channel; cooldownDays?: number; installed: Record<string, InstalledRecord>; lastRun: string }
+export interface HostState { version: 1; installerVersion: string; selectedIds: string[]; channel: Channel; cooldownDays?: number; installed: Record<string, InstalledRecord>; lastRun: string }

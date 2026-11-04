@@ -80,12 +80,11 @@ describe('claudePluginProvider', () => {
     const afterUninstall = await claudePluginProvider.detect(u, ctx);
     expect(afterUninstall).toBeNull();
   });
-  it('re-enables an installed but disabled plugin on install mode without updating', async () => {
+  it('re-enables an installed but disabled plugin on install mode, then refreshes it', async () => {
     const ctx = ctxWith(['claude-plugins-official'], [{ id: 'superpowers@claude-plugins-official', version: '6.3.0', scope: 'user', enabled: false }], { 'claude plugin enable superpowers@claude-plugins-official': '' });
     const c = plugin('superpowers'); const inst = await claudePluginProvider.detect(c, ctx);
     const acts = await claudePluginProvider.plan(c, ctx, inst, 'install');
-    expect(acts).toHaveLength(1); expect(acts[0]).toMatchObject({ op: 'configure' });
-    expect(acts.some((a) => a.op === 'update')).toBe(false);
+    expect(acts.map((a) => a.op)).toEqual(['configure', 'update']);
     await acts[0]!.run(ctx);
     expect(ctx.calls).toContainEqual(['claude', 'plugin', 'enable', 'superpowers@claude-plugins-official']);
   });

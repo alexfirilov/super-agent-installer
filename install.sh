@@ -1,6 +1,6 @@
 #!/bin/sh
 # super-agent-installer bootstrap for Linux, macOS and WSL.
-# Usage: curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.sh | bash -s -- [--profile all] [--yes]
+# Usage: curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.sh | bash -s -- [--yes] [--yes]
 set -eu
 umask 077
 
