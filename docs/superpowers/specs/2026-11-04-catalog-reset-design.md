@@ -34,10 +34,10 @@ Builder's calls, made on the owner's questions and open to veto before release:
 
 On by default: Claude Code, Codex, git, node, jq, ripgrep, gh, PowerShell 7, bubblewrap, TypeScript and Pyright language
 servers with their LSP plugins, `playwright-cli`, superpowers (both agents), `security-guidance`, `frontend-design` (both
-agents), `skill-creator`, Context7 (both agents), mattpocock (`grill-me`, `grilling`, `handoff`, `writing-for-agents`,
+agents), `skill-creator`, Context7 (both agents), mattpocock (`grill-me`, `grilling`, `handoff`, `research`, `writing-for-agents`,
 `improve-codebase-architecture`, and the `codebase-design` and `domain-modeling` skills it calls), commit-commands, Codex memories, Windows git symlinks, global instructions.
 
-Off by default: uv, Go and gopls with its LSP plugin, and the two headless-host settings.
+Off by default: uv, Go and gopls with its LSP plugin, `second-opinion` (Claude only), and the two headless-host settings.
 
 Codex ships its own `skill-creator` in `~/.codex/skills/.system`, so the catalog installs that one on Claude only.
 

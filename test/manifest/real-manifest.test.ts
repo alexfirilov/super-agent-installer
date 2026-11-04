@@ -15,7 +15,7 @@ describe('manifest.json', () => {
     expect(s.tokenTotals.claude).toBeLessThan(8000); expect(s.codexMcpCount).toBeLessThanOrEqual(5);
   });
   it('optional components stay out of the default selection', () => {
-    for (const id of ['uv', 'gopls', 'cp-gopls-lsp']) expect(defaults('linux'), id).not.toContain(id);
+    for (const id of ['uv', 'gopls', 'cp-gopls-lsp', 'sk-second-opinion']) expect(defaults('linux'), id).not.toContain(id);
   });
   it('everything agreed to go is retired, not silently deleted, so hosts that have it can remove it', () => {
     const live = m.components.map((c) => c.id); const retired = (m.retired ?? []).map((c) => c.id);
