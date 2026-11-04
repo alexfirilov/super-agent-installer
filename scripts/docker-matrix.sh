@@ -34,7 +34,7 @@ INNER='
   if ! printf "%s\n" "$out" | grep -q "sign-in was skipped with --no-login"; then
     echo "FAILED: $SAI_IMAGE: a --no-login run must still tell the user each agent is not signed in"; exit 1
   fi
-  # Exit 2 is drift. A distro's jq or gh trailing upstream is outdated by design, and only that passes: nothing may be
+  # Exit 2 is drift. A distro package of jq or gh trailing upstream is outdated by design, and only that passes: nothing may be
   # missing right after an install, and nothing but a tool may be behind.
   echo; echo "--- $SAI_IMAGE: super-agent-installer check"
   rc=0; drift=$(super-agent-installer check --manifest /sai/manifest.json) || rc=$?
