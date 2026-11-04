@@ -17,9 +17,9 @@ INNER='
   mkdir -p "$HOME"; cd "$HOME"
   step() { echo; echo "--- $SAI_IMAGE: $*"; "$@"; }
   step super-agent-installer doctor
-  step super-agent-installer install --yes --dry-run
+  step super-agent-installer install --yes --dry-run --manifest /sai/manifest.json
   echo; echo "--- $SAI_IMAGE: super-agent-installer install --yes --no-login"
-  out=$(super-agent-installer install --yes --no-login) || { echo "$out"; echo "FAILED: $SAI_IMAGE install"; exit 1; }
+  out=$(super-agent-installer install --yes --no-login --manifest /sai/manifest.json) || { echo "$out"; echo "FAILED: $SAI_IMAGE install"; exit 1; }
   echo "$out"
   leftover=$(printf "%s\n" "$out" \
     | grep "^- " \
@@ -34,15 +34,15 @@ INNER='
   if ! printf "%s\n" "$out" | grep -q "sign-in was skipped with --no-login"; then
     echo "FAILED: $SAI_IMAGE: a --no-login run must still tell the user each agent is not signed in"; exit 1
   fi
-  step super-agent-installer check
-  step super-agent-installer update --no-self-update --yes
+  step super-agent-installer check --manifest /sai/manifest.json
+  step super-agent-installer update --no-self-update --yes --manifest /sai/manifest.json
 '
 for df in test/docker/Dockerfile.*; do
   name="${df##*.}"; img="sai-test-$name"
   echo "=== $name: build"
   $DOCKER build -q -f "$df" -t "$img" . || { echo "build failed: $name"; status=1; continue; }
   echo "=== $name: doctor, dry-run, install, check, update"
-  $DOCKER run --rm -e HOME=/tmp/sai-home -e CLAUDE_CONFIG_DIR=/tmp/sai-home/.claude -e CODEX_HOME=/tmp/sai-home/.codex -e SAI_IMAGE="$name" "$img" sh -ec "$INNER" || { echo "FAILED: $name"; status=1; continue; }
+  $DOCKER run --rm -v "$PWD/manifest.json:/sai/manifest.json:ro" -e HOME=/tmp/sai-home -e CLAUDE_CONFIG_DIR=/tmp/sai-home/.claude -e CODEX_HOME=/tmp/sai-home/.codex -e SAI_IMAGE="$name" "$img" sh -ec "$INNER" || { echo "FAILED: $name"; status=1; continue; }
   echo "PASSED: $name"
 done
 exit $status

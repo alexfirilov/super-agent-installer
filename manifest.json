@@ -976,7 +976,7 @@
         "windows",
         "darwin"
       ],
-      "description": "grill-me and grilling (interview a plan), handoff, writing-for-agents, improve-codebase-architecture with the codebase-design and domain-modeling skills it calls",
+      "description": "grill-me and grilling (interview a plan), handoff, research, writing-for-agents, improve-codebase-architecture with the codebase-design and domain-modeling skills it calls",
       "verdict": "recommended",
       "defaultSelected": true,
       "prerequisites": [
@@ -993,7 +993,8 @@
           "writing-for-agents",
           "improve-codebase-architecture",
           "codebase-design",
-          "domain-modeling"
+          "domain-modeling",
+          "research"
         ],
         "targets": [
           "claude-code",
@@ -1035,8 +1036,48 @@
           "owner": "mattpocock",
           "repo": "skills",
           "skill": "domain-modeling"
+        },
+        {
+          "owner": "mattpocock",
+          "repo": "skills",
+          "skill": "research"
         }
       ]
+    },
+    {
+      "id": "sk-second-opinion",
+      "name": "second-opinion",
+      "kind": "skill",
+      "agents": "claude",
+      "platforms": [
+        "linux",
+        "windows",
+        "darwin"
+      ],
+      "description": "Gets a Codex review of uncommitted changes, branches or commits from inside Claude Code",
+      "verdict": "optional",
+      "defaultSelected": false,
+      "prerequisites": [
+        "node"
+      ],
+      "source": "https://github.com/trailofbits/skills",
+      "audit": [
+        {
+          "owner": "trailofbits",
+          "repo": "skills",
+          "skill": "second-opinion"
+        }
+      ],
+      "spec": {
+        "kind": "skill",
+        "repo": "trailofbits/skills",
+        "skills": [
+          "second-opinion"
+        ],
+        "targets": [
+          "claude-code"
+        ]
+      }
     }
   ],
   "retired": [
