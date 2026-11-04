@@ -1,7 +1,7 @@
 <#
  super-agent-installer bootstrap for Windows (Windows PowerShell 5.1 and PowerShell 7).
- Usage: irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.ps1 | iex
-        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.ps1))) -NoRun
+ Usage: irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.5.0/install.ps1 | iex
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.5.0/install.ps1))) -NoRun
 #>
 [CmdletBinding()]
 param([switch]$NoRun, [Parameter(ValueFromRemainingArguments = $true)][string[]]$RestArgs)
