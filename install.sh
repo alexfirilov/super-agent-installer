@@ -1,10 +1,10 @@
 #!/bin/sh
 # super-agent-installer bootstrap for Linux, macOS and WSL.
-# Usage: curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.5.0/install.sh | bash -s -- [--yes] [--yes]
+# Usage: curl -fsSL https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.5.1/install.sh | bash -s -- [--yes] [--yes]
 set -eu
 umask 077
 
-SAI_DEFAULT_VERSION="0.5.0"
+SAI_DEFAULT_VERSION="0.5.1"
 SAI_VERSION="${SAI_VERSION:-$SAI_DEFAULT_VERSION}"
 SAI_REPO="${SAI_REPO:-alexfirilov/super-agent-installer}"
 SAI_BASE_URL="${SAI_BASE_URL:-https://github.com/${SAI_REPO}/releases/download/v${SAI_VERSION}}"
