@@ -6,7 +6,7 @@ import { SKILLS_CLI } from '../../src/pins.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 import type { Component } from '../../src/types.js';
 const skill = (id: string, repo: string, skills: string[] | '*', targets: Array<'claude-code' | 'codex'> = ['claude-code', 'codex'], audit?: Component['audit'], postInstall?: string[][]): Component => ({ id, name: id, kind: 'skill', agents: 'both', platforms: ['linux', 'windows', 'darwin'], description: '', verdict: 'recommended', defaultSelected: true, audit, spec: { kind: 'skill', repo, skills, targets, postInstall } });
-const auditFetch = (level: 'pass' | 'warn' | 'fail') => (async () => new Response(JSON.stringify({ gen: { status: level === 'fail' ? 'fail' : 'pass' }, snyk: { status: level === 'warn' ? 'warn' : 'pass' } }))) as unknown as typeof fetch;
+const auditFetch = (level: 'pass' | 'warn' | 'fail') => (async () => new Response(JSON.stringify({ audits: [{ slug: 'agent-trust-hub', status: level === 'fail' ? 'fail' : 'pass' }, { slug: 'snyk', status: level === 'warn' ? 'warn' : 'pass' }] }))) as unknown as typeof fetch;
 function withLock(ctx: ReturnType<typeof makeTestCtx>, skills: Record<string, { source: string; skillFolderHash?: string }>) { mkdirSync(join(ctx.host.home, '.agents'), { recursive: true }); writeFileSync(join(ctx.host.home, '.agents', '.skill-lock.json'), JSON.stringify({ version: 3, skills })); }
 describe('skillProvider', () => {
   it('detects from the lock file', async () => {
@@ -145,7 +145,7 @@ describe('skillProvider', () => {
   });
   it('skips the audit fetch entirely when ctx.noAudit is true', async () => {
     let fetchCalled = false;
-    const fetchSpy = (async (u: string) => { if (!String(u).includes('registry.npmjs.org')) fetchCalled = true; return new Response(JSON.stringify({ gen: { status: 'fail' } })); }) as unknown as typeof fetch;
+    const fetchSpy = (async (u: string) => { if (!String(u).includes('registry.npmjs.org')) fetchCalled = true; return new Response(JSON.stringify({ audits: [{ slug: 'agent-trust-hub', status: 'fail' }] })); }) as unknown as typeof fetch;
     const ctx = makeTestCtx({ fetch: fetchSpy, responses: { 'node --version': 'v24.19.0', [`npx -y skills@${SKILLS_CLI} add a/b --skill x -g -a claude-code -a codex -y`]: 'installed' } });
     ctx.noAudit = true;
     const r = await (await skillProvider.plan(skill('sk-noaudit', 'a/b', ['x']), ctx, null, 'install'))[0]!.run(ctx);
@@ -157,7 +157,7 @@ describe('skillProvider', () => {
     const ctx = makeTestCtx({ fetch: auditFetch('pass'), responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
     expect((await (await skillProvider.plan(skill('sk-all', 'a/b', '*'), ctx, null, 'install'))[0]!.run(ctx)).ok).toBe(true);
     expect(ctx.log.lines.some((l) => /audit skipped: no audit targets for a\/b/.test(l))).toBe(true);
-    const urls: string[] = []; const f = (async (u: string) => { urls.push(String(u)); return new Response(JSON.stringify({ gen: { status: 'pass' } })); }) as unknown as typeof fetch;
+    const urls: string[] = []; const f = (async (u: string) => { urls.push(String(u)); return new Response(JSON.stringify({ audits: [{ slug: 'agent-trust-hub', status: 'pass' }] })); }) as unknown as typeof fetch;
     const audited = makeTestCtx({ fetch: f, responses: { 'node --version': 'v24.19.0', [cmd]: 'installed' } });
     expect((await (await skillProvider.plan(skill('sk-all', 'a/b', '*', ['claude-code', 'codex'], [{ owner: 'a', repo: 'b', skill: 'one' }]), audited, null, 'install'))[0]!.run(audited)).ok).toBe(true);
     expect(urls.some((u) => /a\/b\/one/.test(u))).toBe(true); expect(audited.log.lines.some((l) => /audit skipped/.test(l))).toBe(false);

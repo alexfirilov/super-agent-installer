@@ -1,17 +1,20 @@
 export interface AuditResult { level: 'pass' | 'warn' | 'fail' | 'unknown'; scanners: Record<string, string>; riskLevel?: string }
 
-const BLOCKING = ['gen', 'socket', 'snyk'];
+const BLOCKING = ['agent-trust-hub', 'socket', 'snyk'];
 
 export async function auditSkill(f: typeof fetch, owner: string, repo: string, skill: string): Promise<AuditResult> {
   try {
     const r = await f(`https://skills.sh/api/v1/skills/audit/${owner}/${repo}/${skill}`, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return { level: 'unknown', scanners: {} };
-    const j = (await r.json()) as Record<string, { status?: string; riskLevel?: string }>;
+    // { id, source, slug, audits: [{ slug, status, riskLevel, ... }] }. A shape we cannot read is `unknown`, never a pass:
+    // this parser once walked the top-level keys of this response, found no statuses, and passed every skill.
+    const { audits } = (await r.json()) as { audits?: Array<{ slug?: string; provider?: string; status?: string; riskLevel?: string }> };
+    if (!Array.isArray(audits)) return { level: 'unknown', scanners: {} };
     const scanners: Record<string, string> = {};
     let riskLevel: string | undefined;
     let level: AuditResult['level'] = 'pass';
-    for (const [name, v] of Object.entries(j)) {
-      if (!v || typeof v !== 'object') continue;
+    for (const v of audits) {
+      const name = v.slug ?? v.provider ?? 'unknown';
       const s = String(v.status ?? 'none').toLowerCase();
       scanners[name] = s;
       if (v.riskLevel) riskLevel = v.riskLevel;
