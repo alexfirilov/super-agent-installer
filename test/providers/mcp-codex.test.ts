@@ -102,7 +102,7 @@ describe('restoring a user\'s own table (Finding 9)', () => {
   });
   it('uninstall writes the recorded table back when the current one is still ours', async () => {
     const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://api.githubcopilot.com/mcp/readonly"\nbearer_token_env_var = "GITHUB_PAT_TOKEN"\n', cmds);
-    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
+    ctx.state = { version: 1, installerVersion: '0.4.0', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
     const r = await (await mcpCodexProvider.plan(c, ctx, await mcpCodexProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(r.message).toMatch(/restored/);
     expect(ctx.calls).toContainEqual(['codex', 'mcp', 'remove', 'gh']);
@@ -111,7 +111,7 @@ describe('restoring a user\'s own table (Finding 9)', () => {
   });
   it('uninstall leaves a table the user edited after us', async () => {
     const ctx = ctxWith('[mcp_servers.gh]\nurl = "https://api.githubcopilot.com/mcp/readonly"\nbearer_token_env_var = "GITHUB_PAT_TOKEN"\nstartup_timeout_sec = 99\n', cmds);
-    ctx.state = { version: 1, installerVersion: '0.4.0', profile: 'all', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
+    ctx.state = { version: 1, installerVersion: '0.4.0', selectedIds: ['mcp-cx-gh'], channel: 'latest', lastRun: 't', installed: { 'mcp-cx-gh': { version: null, at: 't', byUs: true, previous: theirs } } };
     const r = await (await mcpCodexProvider.plan(c, ctx, await mcpCodexProvider.detect(c, ctx), 'uninstall'))[0]!.run(ctx);
     expect(r.ok).toBe(true); expect(r.changed).toBe(false);
     expect(ctx.calls.some((a) => a.join(' ') === 'codex mcp remove gh')).toBe(false);

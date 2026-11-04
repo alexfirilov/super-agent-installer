@@ -6,7 +6,7 @@ import { makeTestCtx } from './helpers/ctx.js';
 import type { Component, Provider, Selection } from '../src/types.js';
 const c = (id: string, kind: Component['kind'], spec: Component['spec']): Component => ({ id, name: id, kind, agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: true, spec });
 const fake = (kind: Component['kind'], installed: boolean, acts: number): Provider => ({ kind, detect: async () => (installed ? { version: '1' } : null), plan: async (comp, _ctx, inst, mode) => Array.from({ length: acts }, (_, i) => action(comp.id, mode === 'uninstall' ? 'uninstall' : inst ? 'update' : 'install', `${comp.id} ${i}`, async () => ({ ok: true, changed: true, message: 'done' }))) });
-const sel = (components: Component[]): Selection => ({ profile: 'all', components, excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 });
+const sel = (components: Component[]): Selection => ({ components, excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 });
 describe('planner', () => {
   it('orders actions by kind then selection, adds skip for empty plans, reverses for uninstall', async () => {
     clearProviders(); registerProvider(fake('skill', false, 1)); registerProvider(fake('tool', true, 1)); registerProvider(fake('agent', false, 0));

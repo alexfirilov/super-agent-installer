@@ -1,6 +1,5 @@
 import * as clack from '@clack/prompts';
-import type { Channel, Ctx, HostInfo, HostState, Kind, ProfileName } from '../types.js';
-import { PROFILE_NAMES } from '../types.js';
+import type { Channel, Ctx, HostInfo, HostState, Kind } from '../types.js';
 import { resolveSelection, slotConflicts } from '../manifest/resolve.js';
 import { resolveChannel } from '../state/state.js';
 import { DEFAULT_COOLDOWN_DAYS } from '../pins.js';
@@ -34,17 +33,13 @@ export async function settleCooldown(ctx: Ctx, flag: number | undefined, state: 
   return DEFAULT_COOLDOWN_DAYS;
 }
 /** `cooldownDays` is set when the picker asked (the selection resolves to the `latest` channel and no `--cooldown` was given). */
-export async function runPicker(ctx: Ctx, o: { state: HostState | null; ui?: PickerUi; channelFlag?: Channel; cooldownFlag?: number }): Promise<{ picked: string[]; profile: ProfileName | 'saved'; cooldownDays?: number } | null> {
+export async function runPicker(ctx: Ctx, o: { state: HostState | null; ui?: PickerUi; channelFlag?: Channel; cooldownFlag?: number }): Promise<{ picked: string[]; cooldownDays?: number } | null> {
   const ui = o.ui ?? clackUi; const m = ctx.manifest; ui.intro('super-agent-installer'); ui.note(hostSummary(ctx.host), 'Host');
-  const profiles: Array<{ value: string; label: string; hint?: string }> = PROFILE_NAMES.filter((p) => m.profiles[p]).map((p) => ({ value: p as string, label: p, hint: m.profiles[p]?.description }));
-  if (o.state) profiles.unshift({ value: 'saved', label: 'saved (this host)', hint: `${o.state.selectedIds.length} components from ${o.state.lastRun}` });
-  const profile = await ui.select({ message: 'Profile (starting point; you can adjust every category next)', options: profiles, initialValue: o.state ? 'saved' : 'all' }); if (ui.isCancel(profile)) return null;
-  const prof = profile as ProfileName | 'saved';
-  const base = resolveSelection(m, ctx.host, prof === 'saved' ? { profile: 'saved', savedIds: o.state?.selectedIds ?? [] } : { profile: prof });
+  const base = resolveSelection(m, ctx.host, o.state ? { savedIds: o.state.selectedIds } : {}); // this host's saved choices are the starting point, else the catalog defaults
   const initial = new Set(base.components.map((c) => c.id)); const picked: string[] = [];
   for (const [kind, label] of CATEGORIES) {
     const comps = m.components.filter((c) => c.kind === kind && c.platforms.includes(ctx.host.platform)); if (!comps.length) continue;
-    const options = comps.map((c) => ({ value: c.id, label: `${c.name}${c.forceOffInAll ? ' (off in ALL)' : ''}`, hint: [c.verdict, c.contextCostTokens?.claude ? `${c.contextCostTokens.claude} tok` : '', c.popularity?.stars ? `${c.popularity.stars.toLocaleString()} stars` : c.popularity?.installs ? `${c.popularity.installs.toLocaleString()} installs` : '', c.description].filter(Boolean).join(' · ') }));
+    const options = comps.map((c) => ({ value: c.id, label: c.name, hint: [c.verdict, c.contextCostTokens?.claude ? `${c.contextCostTokens.claude} tok` : '', c.popularity?.stars ? `${c.popularity.stars.toLocaleString()} stars` : c.popularity?.installs ? `${c.popularity.installs.toLocaleString()} installs` : '', c.description].filter(Boolean).join(' · ') }));
     const r = await ui.multiselect({ message: label, options, initialValues: comps.filter((c) => initial.has(c.id)).map((c) => c.id), required: false }); if (ui.isCancel(r)) return null;
     picked.push(...(r as string[]));
   }
@@ -53,13 +48,13 @@ export async function runPicker(ctx: Ctx, o: { state: HostState | null; ui?: Pic
     const w = await ui.select({ message: `Only one ${conflict.slot} component can be active. Keep which?`, options: conflict.ids.map((id) => ({ value: id, label: id })), initialValue: conflict.ids[0] }); if (ui.isCancel(w)) return null;
     chosen = chosen.filter((c) => c.slot !== conflict.slot || c.id === w);
   }
-  const sel = resolveSelection(m, ctx.host, { profile: prof, picked: chosen.map((c) => c.id), savedIds: o.state?.selectedIds });
+  const sel = resolveSelection(m, ctx.host, { picked: chosen.map((c) => c.id) });
   const warn = [sel.tokenTotals.claude > 8000 ? `Claude always-on tokens ~${sel.tokenTotals.claude} (above the 8k warning line)` : `Claude always-on tokens ~${sel.tokenTotals.claude}`, sel.codexMcpCount > 5 ? `Codex MCP servers: ${sel.codexMcpCount} (Codex has no tool search; keep it at 5 or fewer)` : `Codex MCP servers: ${sel.codexMcpCount}`, `${sel.components.length} components selected`, ...(sel.excluded.filter((e) => e.reason !== 'platform').map((e) => `excluded ${e.id}: ${e.reason}`))];
   ui.note(warn.join('\n'), 'Selection');
   let cooldownDays: number | undefined;
-  if (o.cooldownFlag === undefined && resolveChannel(o.channelFlag, o.state, prof === 'saved' ? undefined : m.profiles[prof]) === 'latest') {
+  if (o.cooldownFlag === undefined && resolveChannel(o.channelFlag, o.state) === 'latest') {
     const c = await pickCooldown(ui, o.state?.cooldownDays ?? DEFAULT_COOLDOWN_DAYS); if (c === null) return null; cooldownDays = c;
   }
   const go = await ui.confirm({ message: 'Proceed with this selection?', initialValue: true }); if (ui.isCancel(go) || !go) return null;
-  return { picked: sel.components.map((c) => c.id), profile: prof, ...(cooldownDays !== undefined ? { cooldownDays } : {}) };
+  return { picked: sel.components.map((c) => c.id), ...(cooldownDays !== undefined ? { cooldownDays } : {}) };
 }

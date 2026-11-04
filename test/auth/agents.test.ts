@@ -244,7 +244,7 @@ describe('claude setup-token with no terminal of our own', () => {
       const logPath = scriptCall![scriptCall!.length - 1]!;
       expect(logPath).not.toMatch(new RegExp(`^${tmpdir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/sai-setup-token-`)); // not a predictable path
       expect(logPath.startsWith(tmpdir())).toBe(true);
-      expect(logPath).toMatch(/sai-auth-[^/]+\/setup-token\.log$/); // inside a 0700 mkdtemp dir
+      expect(logPath).toMatch(/sai-auth-[^/\\]+[/\\]setup-token\.log$/); // inside a 0700 mkdtemp dir
     } finally {
       Object.defineProperty(process.stdout, 'isTTY', { value: realStdout, configurable: true });
       Object.defineProperty(process.stdin, 'isTTY', { value: realStdin, configurable: true });

@@ -1,6 +1,6 @@
-import type { Component, HostInfo, Manifest, ProfileName, Selection, Slot } from '../types.js';
+import type { Component, HostInfo, Manifest, Selection, Slot } from '../types.js';
 
-export interface ResolveOpts { profile: ProfileName | 'saved'; savedIds?: string[]; only?: string[]; skip?: string[]; picked?: string[] }
+export interface ResolveOpts { savedIds?: string[]; only?: string[]; skip?: string[]; picked?: string[] }
 
 export function closure(manifest: Manifest, ids: string[]): string[] {
   const byId = new Map(manifest.components.map((c) => [c.id, c]));
@@ -32,26 +32,12 @@ export function resolveSelection(manifest: Manifest, host: HostInfo, o: ResolveO
 
   if (o.picked) {
     ids = [...o.picked];
-  } else if (o.profile === 'saved') {
-    ids = [...(o.savedIds ?? [])];
+  } else if (o.savedIds) {
+    // a retired id carries its host to the successor; one with no successor just leaves the selection
+    const successor = new Map((manifest.retired ?? []).map((r) => [r.id, r.replacedBy]));
+    ids = [...new Set(o.savedIds.flatMap((id) => { const next = byId.has(id) ? id : successor.get(id); return next ? [next] : []; }))];
   } else {
-    const p = manifest.profiles[o.profile] ?? { description: '', base: 'all' as const };
-    const set = new Set<string>(p.base === 'all' ? manifest.components.filter((c) => c.defaultSelected && !c.forceOffInAll).map((c) => c.id) : []);
-    if (p.base === 'all') for (const c of manifest.components) if (c.forceOffInAll && c.defaultSelected) excluded.push({ id: c.id, reason: 'forceOffInAll' });
-    for (const id of p.include ?? []) set.add(id);
-    for (const id of p.exclude ?? []) set.delete(id);
-    for (const c of manifest.components) {
-      const ov = c.profiles?.[o.profile as ProfileName];
-      if (ov === true) set.add(c.id);
-      if (ov === false) set.delete(c.id);
-    }
-    if (p.agentFilter) {
-      for (const id of [...set]) {
-        const c = byId.get(id);
-        if (c && c.agents !== 'both' && c.agents !== p.agentFilter) set.delete(id);
-      }
-    }
-    ids = order.filter((id) => set.has(id));
+    ids = order.filter((id) => byId.get(id)!.defaultSelected);
   }
 
   if (o.only) ids = o.only.filter((id) => byId.has(id));
@@ -112,7 +98,6 @@ export function resolveSelection(manifest: Manifest, host: HostInfo, o: ResolveO
   }
 
   return {
-    profile: o.profile,
     components,
     excluded,
     tokenTotals: tok,

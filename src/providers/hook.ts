@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { Action, Component, Ctx, Installed, Provider } from '../types.js';
-import { readJsonFile, writeJsonAtomic } from '../config/json.js';
+import { readJsonFile, writeJsonAtomic, backupFile } from '../config/json.js';
 import { probeVersion } from '../detect/tools.js';
 import { action, ok, fail, skipAction } from './types.js';
 
@@ -31,20 +31,41 @@ export async function stripCavemanRoute(ctx: Ctx): Promise<boolean> {
   return true;
 }
 
+const CAVEMAN_HOOK = /caveman[^"]*native-hook claude/;
+/** Takes caveman's entries out of settings.json by hand, for when its CLI is no longer there to do it. Other hooks stay. */
+async function stripCavemanHooks(ctx: Ctx): Promise<void> {
+  const settings = (await readJsonFile<Record<string, unknown>>(ctx.paths.claudeSettings)) ?? {};
+  const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
+  for (const [event, handlers] of Object.entries(hooks)) {
+    const kept = handlers.filter((h) => !CAVEMAN_HOOK.test(JSON.stringify(h)));
+    if (kept.length) hooks[event] = kept; else delete hooks[event];
+  }
+  if (!Object.keys(hooks).length) delete settings.hooks;
+  if (ctx.dryRun) return;
+  await backupFile(ctx.paths.claudeSettings, ctx.paths.backupsDir);
+  await writeJsonAtomic(ctx.paths.claudeSettings, settings);
+}
+
 export const hookProvider: Provider = {
   kind: 'hook',
   async detect(c, ctx) {
     if (c.spec.kind !== 'hook') return null;
-    if (c.spec.agent === 'claude') { const s = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const text = JSON.stringify((s as { hooks?: unknown }).hooks ?? {}); return /caveman-proxy[^"]*native-hook claude|caveman-proxy' native-hook claude/.test(text) ? { version: null } : null; }
+    if (c.spec.agent === 'claude') { const s = (await readJsonFile(ctx.paths.claudeSettings)) ?? {}; const text = JSON.stringify((s as { hooks?: unknown }).hooks ?? {}); return CAVEMAN_HOOK.test(text) ? { version: null } : null; } // the CLI's hook runs through caveman-proxy or, on an npm install, @caveman-ai/cli/dist/native-hook-fast.js
     try { const t = await readFile(ctx.paths.codexHooks, 'utf8'); return /caveman/.test(t) ? { version: null } : null; } catch { return null; }
   },
   async plan(c: Component, ctx: Ctx, installed: Installed | null, mode): Promise<Action[]> {
     if (c.spec.kind !== 'hook') return []; const agent = c.spec.agent;
     if (agent === 'codex' && ctx.host.platform === 'windows') return [skipAction(c.id, 'caveman Codex hooks are disabled on Windows (caveman docs/install-windows.md)')];
-    if (!(await probeVersion(ctx.run, ['caveman', '--version']))) return [skipAction(c.id, 'caveman CLI not found; select the caveman-cli tool first', 'caveman-cli')];
+    if (!(await probeVersion(ctx.run, ['caveman', '--version']))) {
+      if (mode !== 'uninstall' || !installed) return [skipAction(c.id, 'caveman CLI not found; select the caveman-cli tool first', 'caveman-cli')];
+      if (agent !== 'claude') return [action(c.id, 'uninstall', 'remove caveman native hooks (codex)', async () => fail('caveman hooks are still in Codex hooks.json and the caveman CLI that removes them is not on PATH'))];
+      return [action(c.id, 'uninstall', 'remove caveman native hooks (claude, CLI gone)', async () => { await stripCavemanHooks(ctx); await stripCavemanRoute(ctx); return ok('caveman hooks removed from settings.json; the caveman CLI was already gone'); })];
+    }
     if (mode === 'uninstall') return installed ? [action(c.id, 'uninstall', `remove caveman native hooks (${agent})`, async () => {
       const r = await ctx.run(['caveman', 'setup', '--agent-native', agent, '--remove'], { allowFailure: true });
       if (r.code !== 0) return fail(`caveman setup --agent-native ${agent} --remove failed: ${(r.stderr || r.stdout).trim()}`);
+      // it exits 0 with only a warning when it has no record of the setup, so believe the file, not the exit code
+      if (await hookProvider.detect(c, ctx)) return fail(`caveman setup --agent-native ${agent} --remove left its hooks in place: ${(r.stderr || r.stdout).trim()}`);
       return ok('caveman hooks removed');
     })] : [];
     if (installed && mode !== 'update') {

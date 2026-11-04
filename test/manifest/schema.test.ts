@@ -4,6 +4,17 @@ import { parseManifest, ManifestError } from '../../src/manifest/schema.js';
 const base = { version: 1, profiles: { all: { description: 'everything', base: 'all' } }, components: [] as unknown[] };
 const plugin = { id: 'cp-x', name: 'x', kind: 'claude-plugin', agents: 'claude', platforms: ['linux'], description: 'd', verdict: 'optional', defaultSelected: false, spec: { kind: 'claude-plugin', marketplace: 'm', plugin: 'x' } };
 
+describe('retired components', () => {
+  const comp = (id: string) => ({ id, name: id, kind: 'tool', agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: false, spec: { kind: 'tool', probe: ['x'], packages: {} } });
+  it('accepts a retired entry and its successor', () => {
+    expect(parseManifest({ version: 1, components: [comp('new')], retired: [{ ...comp('old'), replacedBy: 'new' }] }).retired?.[0]?.replacedBy).toBe('new');
+  });
+  it('rejects a successor that does not exist, and an id that is both live and retired', () => {
+    expect(() => parseManifest({ version: 1, components: [comp('a')], retired: [{ ...comp('old'), replacedBy: 'nope' }] })).toThrow(/replacedBy unknown id nope/);
+    expect(() => parseManifest({ version: 1, components: [comp('a')], retired: [comp('a')] })).toThrow(/both a component and retired/);
+  });
+});
+
 describe('parseManifest', () => {
   it('parses a valid manifest', () => {
     const m = parseManifest({ ...base, components: [plugin] });

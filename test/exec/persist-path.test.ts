@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { persistToolPath } from '../../src/exec/persist-path.js';
 import { makeTestCtx } from '../helpers/ctx.js';
 
-describe('persistToolPath', () => {
+describe.skipIf(process.platform === 'win32')('persistToolPath', () => {
   it('writes the home tool dirs that exist into the shell rc, and never a system dir', async () => {
     // GCE QA on Debian/Rocky: gopls installed into ~/go/bin, which no login shell had on PATH, so the LSP plugin
     // could not find it after the run -- leftover work for the user.

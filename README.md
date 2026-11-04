@@ -14,20 +14,12 @@ Windows (PowerShell 5.1 or 7):
 
 Unattended:
 
-    curl -fsSL .../install.sh | bash -s -- --yes --profile homelab
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.ps1))) --yes --profile work
-
-Proxmox host (root, no sudo):
-
-    curl -fsSL .../install.sh | bash -s -- --yes --profile proxmox-host
-
-This puts Claude Code and Codex, running as root, on the hypervisor itself: they can then run commands against the
-host, its storage and every guest. The installer says so at the start of every run there. For anything you would
-mind losing, install into a dedicated management VM or container instead.
+    curl -fsSL .../install.sh | bash -s -- --yes
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/alexfirilov/super-agent-installer/v0.4.0/install.ps1))) --yes
 
 ## Commands
 
-    super-agent-installer            interactive picker (default: everything)
+    super-agent-installer            interactive picker (starts from this host's saved choices, else the defaults)
     super-agent-installer update     update the installer, then everything selected on this host, in one run
     super-agent-installer check      drift report (exit 2 when something is outdated, missing or not as configured)
     super-agent-installer list       all components with verdicts and token costs
@@ -36,7 +28,7 @@ mind losing, install into a dedicated management VM or container instead.
     super-agent-installer uninstall <id...>   remove named components (only ones it installed)
     super-agent-installer uninstall --all      remove every component it installed on this host
 
-Flags: --profile all|minimal|devops|claude-only|codex-only|work|homelab|proxmox-host, --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --cooldown <days>, --manifest <path|url>, --offline, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate, --all, --force.
+Flags: --only a,b, --skip c, --yes, --dry-run, --json, --no-audit, --channel latest|stable, --cooldown <days>, --manifest <path|url>, --offline, --from-state, --no-self-update, --no-login, --no-persist-secrets, --elevate, --all, --force.
 
 Exit codes, every command: `0` done, `1` a step failed, `2` nothing failed but requested work could not be completed
 (a component blocked on an agent that never signed in; drift for `check`; a dead proxy route for `doctor`),
@@ -45,7 +37,7 @@ Exit codes, every command: `0` done, `1` a step failed, `2` nothing failed but r
 - `--no-login` skips the sign-in phase entirely (see below); use it on a host with no browser, or when you already manage auth yourself.
 - `--no-persist-secrets` leaves pasted API keys in memory for this run only, instead of saving them to the user environment (see [SECURITY.md](SECURITY.md) for what persistence exposes).
 - `--channel` is remembered: `install --channel stable` makes every later bare `update`/`check` use `stable` until
-  you pass `--channel` again. Without a flag or a saved channel, the profile's channel applies, then `latest`.
+  you pass `--channel` again. Without a flag or a saved channel, `latest` applies.
 - `update` updates the installer first; when a new version was installed it re-runs itself (`--no-self-update`)
   so the components are updated by the new version with its manifest, in the same run.
 - `uninstall` removes only what this installer created. Software that was already on the host when it first ran is
@@ -62,12 +54,15 @@ Exit codes, every command: `0` done, `1` a step failed, `2` nothing failed but r
 
 ### What `check` verifies
 
-`check` (and the table at the end of `update`) compares each selected component with the manifest. For tools,
-agents and plugins that is presence plus version: installed vs the pinned or upstream version. For settings, MCP
+`check` (and the table at the end of `update`) compares each selected component with the manifest. For tools
+and agents that is presence plus version: installed vs the pinned or upstream version. For skills it is what
+`skills check` reports upstream. Claude plugins mostly declare no comparable version, so they show `unknown`; `update`
+refreshes them regardless. For settings, MCP
 servers, hooks, the status line and the instructions block it is the configured value vs the wanted one, so an MCP
 entry whose command, args (including the resolved package version) or env differ from the manifest shows as
 `outdated` (`install`/`update` rewrites it).
-It does not inspect anything outside those definitions (a plugin's own files, a skill's contents).
+It does not inspect anything outside those definitions (a plugin's own files, a skill's contents). A component dropped
+from the catalog but still on this host shows as `outdated` until `update` removes it.
 
 ### Catalog and versions
 
@@ -86,27 +81,25 @@ agents never launch a floating `@latest`, and `check` and uninstall can tell wha
 | Channel | Version installed |
 |---|---|
 | `latest` (default) | the newest release on npm / PyPI / the Go proxy that is at least `--cooldown` days old, never below the pin |
-| `stable` (`--channel stable`; the `proxmox-host` profile) | exactly the catalog pin |
+| `stable` (`--channel stable`) | exactly the catalog pin |
 
 The cooldown is asked once (3 days or 0) and saved per host, like the channel; `--cooldown <days>` overrides it,
 and an unattended run without a saved choice uses 3. A delay of a few days skips most hijacked releases, which are
 usually caught and pulled within hours. A `versions` entry can hold a component on one major version (`"major": 1`)
 until the installer is verified against the next. If a registry cannot be reached, the pin is used and the run says
-so. Agents (Claude Code, Codex) and OS packages follow their own channels and package managers; plugins and skills
-follow their marketplaces and repositories.
+so. Agents (Claude Code, Codex) and OS packages follow their own channels and package managers.
 
-### caveman runs with the proxy off
+Plugins and skills track upstream with no cooldown. Both `install` and `update` refresh them, so re-running either one
+converges on the newest version. Skills update by name, so a skill you added yourself stays yours to update, and each
+update passes the same skills.sh audit as a first install: a failed audit keeps the version you have.
 
-`caveman setup --agent-native claude` installs the hooks this installer wants **and** points Claude Code at
-caveman's gateway, by writing `env.ANTHROPIC_BASE_URL = <gateway>/w/claude` into `~/.claude/settings.json`.
-caveman offers no hooks-only mode. So the installer removes that route again after every setup, and heals it on
-any later run: you keep caveman mode, the statusline and the hooks, and Claude Code keeps talking straight to
-`api.anthropic.com`.
+### Components dropped from the catalog
 
-Why the route is not wanted by default: if the proxy is not running, every request goes to a dead port and Claude
-Code cannot reach Anthropic at all; and Remote Control refuses any base URL that is not `api.anthropic.com`. A base
-URL you set yourself is never touched — only caveman's own `/w/claude` route is. `doctor` reports an
-`ANTHROPIC_BASE_URL` override, and exits 2 when it points at a local proxy with nothing listening.
+The catalog's `retired` list names components it no longer ships. `install` and `update` remove one before anything else
+when this host's saved selection has it. Agent configuration (plugins, skills, MCP servers, hooks, settings) goes even if
+it was already on the host when the installer adopted it. Tools and agents go only if the installer's record proves it
+installed them; otherwise they stay on the host and simply stop being managed. `replacedBy` moves the selection to the
+successor, and a removal that fails is retried on the next run. `--dry-run` lists what would go.
 
 ## Sign-in
 
@@ -114,7 +107,7 @@ As soon as the agents themselves are installed (and before anything that needs t
 
 ## What it manages
 
-See `docs/research/CATALOG.md` for the full ranked catalog and `manifest.json` for the exact components. The installer prompts for API keys only when a selected component needs one, validates them against the provider's API (and reports GitHub PAT scopes) before continuing, then persists them to the OS user environment so every new shell and every agent can see them: on Windows via `[Environment]::SetEnvironmentVariable(name, value, 'User')`; on POSIX in a dedicated `0600` file (`${XDG_CONFIG_HOME:-~/.config}/super-agent-installer/secrets.env`) that `~/.profile`, `~/.bashrc` and `~/.zshrc` source with a guarded line (the latter two when they exist; `~/.zshrc` is created when zsh is your login shell) -- the key value itself is never written into either rc file. Pass `--no-persist-secrets` to keep a key in memory for this run only; the summary then lists the exact `export`/`setx` line for every key the run held, including one it captured itself (a `claude setup-token` token on a headless host), so nothing is silently discarded.
+Run `super-agent-installer list` for what this host can install, or read `manifest.json`. The installer prompts for API keys only when a selected component needs one, validates them against the provider's API (and reports GitHub PAT scopes) before continuing, then persists them to the OS user environment so every new shell and every agent can see them: on Windows via `[Environment]::SetEnvironmentVariable(name, value, 'User')`; on POSIX in a dedicated `0600` file (`${XDG_CONFIG_HOME:-~/.config}/super-agent-installer/secrets.env`) that `~/.profile`, `~/.bashrc` and `~/.zshrc` source with a guarded line (the latter two when they exist; `~/.zshrc` is created when zsh is your login shell) -- the key value itself is never written into either rc file. Pass `--no-persist-secrets` to keep a key in memory for this run only; the summary then lists the exact `export`/`setx` line for every key the run held, including one it captured itself (a `claude setup-token` token on a headless host), so nothing is silently discarded.
 
 A persisted key is ambient: every process started from a later shell inherits it, including the agents, their MCP
 servers, plugins and anything they run. That is what makes the components work (the MCP definitions reference
@@ -124,7 +117,7 @@ guests it should see) and see [SECURITY.md](SECURITY.md).
 
 ## After install
 
-Everything above -- sign-in, key validation and persistence, and installing agent-browser's own CLI -- happens inside the run. What's left is advisory only, and only when it applies: restart any Claude Code session that was already running when the plugin/settings changes landed, and if you enabled the caveman Codex hooks, run `/hooks` once inside Codex to trust them.
+Everything above -- sign-in, key validation and persistence -- happens inside the run. What's left is advisory only, and only when it applies: restart any Claude Code session that was already running when the plugin/settings changes landed.
 
 ## Development
 

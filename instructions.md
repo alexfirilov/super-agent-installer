@@ -1,5 +1,6 @@
 ## Global working agreement (managed by super-agent-installer)
 
+- Be concise: lead with the answer, skip preamble and filler. Keep technical terms, code and exact errors intact.
 - Prefer the simplest complete change. Reuse existing code before adding new abstractions.
 - Before claiming work is done, run the relevant tests or commands and report their real output.
 - Use conventional commit messages (feat/fix/docs/chore/refactor/test).

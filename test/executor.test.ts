@@ -6,7 +6,7 @@ import { action, skipAction } from '../src/providers/types.js';
 import { makeTestCtx } from './helpers/ctx.js';
 import type { Component, Provider, Selection } from '../src/types.js';
 const c = (id: string, kind: Component['kind'], spec: Component['spec']): Component => ({ id, name: id, kind, agents: 'both', platforms: ['linux'], description: '', verdict: 'optional', defaultSelected: true, spec });
-const sel = (components: Component[]): Selection => ({ profile: 'all', components, excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 });
+const sel = (components: Component[]): Selection => ({ components, excluded: [], tokenTotals: { claude: 0, codex: 0 }, codexMcpCount: 0 });
 describe('executePlan', () => {
   it('carries an action\'s `previous` into its step record', async () => {
     const plan = { actions: [action('m', 'configure', 'replace', async () => ({ ok: true, changed: true, message: 'replaced', previous: { url: 'https://theirs' } }))], detections: {} };
@@ -47,7 +47,7 @@ describe('executeGrouped', () => {
 describe('refreshEnvironment', () => {
   const saved = process.env.PATH;
   afterEach(() => { process.env.PATH = saved; });
-  it('prepends the tool dirs to process.env.PATH once and drops the agent state caches', async () => {
+  it.skipIf(process.platform === 'win32')('prepends the tool dirs to process.env.PATH once and drops the agent state caches', async () => {
     const ctx = makeTestCtx({ responses: { 'claude --version': '1.0.0' } });
     const before = await getClaudeState(ctx); expect(before.installed).toBe(true);
     ctx.calls.length = 0;

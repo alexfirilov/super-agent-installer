@@ -7,35 +7,43 @@ import { fillVersions } from '../../src/version/resolve.js';
 const m = parseManifest(JSON.parse(readFileSync(new URL('../../manifest.json', import.meta.url), 'utf8')));
 const host = (platform: HostInfo['platform']) => ({ platform } as HostInfo);
 describe('manifest.json', () => {
-  it('validates and contains the approved core', () => {
-    const ids = m.components.map((c) => c.id);
-    for (const id of ['claude-code', 'codex-cli', 'node', 'git', 'uv', 'caveman-cli', 'playwright-cli', 'typescript-language-server', 'pyright', 'gopls', 'cp-superpowers', 'cp-caveman', 'cp-security-guidance', 'cp-context7', 'cp-commit-commands', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'cp-skill-creator', 'cp-feature-dev', 'cp-claude-md-management', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'cp-playwright', 'cp-remember', 'cp-plugin-dev', 'cp-pr-review-toolkit', 'cp-code-review', 'cp-code-simplifier', 'cp-ralph-loop', 'cp-claude-code-setup', 'sk-find-skills', 'sk-caveman-codex', 'sk-cc-devops', 'sk-linux-admin', 'sk-powershell-windows', 'mcp-cx-context7', 'mcp-cx-exa', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'sl-claude-hud', 'instr-global', 'set-codex-memories', 'set-windows-git-symlinks', 'ccusage', 'happy', 'agent-notifications', 'cx-remember']) expect(ids, id).toContain(id);
-    expect(Object.keys(m.profiles).sort()).toEqual(['all', 'claude-only', 'codex-only', 'devops', 'homelab', 'minimal', 'proxmox-host', 'work']);
-  });
-  it('profile all on linux has no slot conflicts, respects forceOff, stays under the token warning', () => {
-    const s = resolveSelection(m, host('linux'), { profile: 'all' });
+  const defaults = (platform: HostInfo['platform']) => resolveSelection(m, host(platform), {}).components.map((c) => c.id);
+  it('the default selection is the agreed core, with no slot conflicts', () => {
+    const s = resolveSelection(m, host('linux'), {});
     expect(slotConflicts(s.components)).toEqual([]);
-    expect(s.components.map((c) => c.id)).not.toContain('hook-caveman-codex');
-    expect(s.components.map((c) => c.id)).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'cp-superpowers', 'cp-caveman', 'cp-github', 'cp-chrome-devtools-mcp', 'cp-hookify', 'sk-cc-devops', 'sk-linux-admin', 'mcp-cx-context7', 'mcp-cx-exa', 'sl-caveman', 'hook-caveman-claude', 'instr-global']));
+    expect(s.components.map((c) => c.id)).toEqual(expect.arrayContaining(['claude-code', 'codex-cli', 'playwright-cli', 'cp-superpowers', 'cx-superpowers', 'cp-security-guidance', 'set-security-stop-review', 'cp-frontend-design', 'sk-frontend-design-codex', 'cp-skill-creator', 'cp-typescript-lsp', 'cp-pyright-lsp', 'mcp-context7', 'mcp-cx-context7', 'set-codex-memories', 'instr-global']));
     expect(s.tokenTotals.claude).toBeLessThan(8000); expect(s.codexMcpCount).toBeLessThanOrEqual(5);
-    const allIds = s.components.map((c) => c.id);
-    for (const id of ['ccusage', 'happy', 'agent-notifications', 'cx-remember']) expect(allIds, id).not.toContain(id);
   });
-  it('windows all includes powershell skill and excludes linux-only items', () => {
-    const s = resolveSelection(m, host('windows'), { profile: 'all' }); const ids = s.components.map((c) => c.id);
-    expect(ids).toContain('sk-powershell-windows'); expect(ids).toContain('set-windows-git-symlinks'); expect(ids).not.toContain('sk-linux-admin'); expect(ids).not.toContain('bubblewrap');
+  it('optional components stay out of the default selection', () => {
+    for (const id of ['uv', 'gopls', 'cp-gopls-lsp', 'ccusage', 'cp-claude-hud', 'cp-commit-commands', 'sk-mattpocock', 'sk-trailofbits', 'sk-hashicorp-terraform', 'sk-docker']) expect(defaults('linux'), id).not.toContain(id);
   });
-  it('devops is the operations preset: core agents and skills, no browser tooling, no LSPs, no infrastructure MCPs', () => {
-    const lin = resolveSelection(m, host('linux'), { profile: 'devops' }); const ids = lin.components.map((c) => c.id);
-    for (const id of ['claude-code', 'codex-cli', 'git', 'jq', 'ripgrep', 'gh', 'cp-superpowers', 'cp-caveman', 'cp-context7', 'cp-security-guidance', 'sk-cc-devops', 'sk-linux-admin', 'mcp-cx-context7', 'instr-global']) expect(ids, id).toContain(id);
-    for (const id of ['cp-playwright', 'cp-chrome-devtools-mcp', 'cp-typescript-lsp', 'cp-pyright-lsp', 'cp-gopls-lsp', 'cp-frontend-design', 'mcp-proxmox-claude', 'mcp-ha-claude', 'mcp-k8s-claude', 'mcp-tailscale-claude', 'sk-powershell-windows']) expect(ids, id).not.toContain(id);
-    expect(lin.tokenTotals.claude).toBeLessThan(8000); expect(lin.codexMcpCount).toBeLessThanOrEqual(5);
-    const win = resolveSelection(m, host('windows'), { profile: 'devops' }).components.map((c) => c.id);
-    expect(win).toContain('sk-powershell-windows'); expect(win).toContain('set-windows-git-symlinks'); expect(win).not.toContain('sk-linux-admin');
+  it('everything agreed to go is retired, not silently deleted, so hosts that have it can remove it', () => {
+    const live = m.components.map((c) => c.id); const retired = (m.retired ?? []).map((c) => c.id);
+    for (const id of ['caveman-cli', 'cp-caveman', 'sk-caveman-codex', 'hook-caveman-claude', 'hook-caveman-codex', 'sl-caveman', 'cp-playwright', 'cp-chrome-devtools-mcp', 'cp-github', 'mcp-cx-github', 'mcp-cx-chrome-devtools', 'cp-context7', 'cp-remember', 'cx-remember', 'cp-hookify', 'sk-find-skills', 'sk-powershell-windows', 'sk-cc-devops', 'sk-agent-browser', 'cp-serena', 'happy', 'cp-plugin-dev', 'mcp-proxmox-claude', 'mcp-ha-claude', 'mcp-k8s-claude', 'mcp-tailscale-claude', 'mcp-n8n-claude', 'docker-mcp-gateway']) {
+      expect(retired, id).toContain(id); expect(live, id).not.toContain(id);
+    }
   });
-  it('proxmox-host is lean and headless', () => {
-    const s = resolveSelection(m, host('linux'), { profile: 'proxmox-host' }); const ids = s.components.map((c) => c.id);
-    expect(ids).toContain('set-claude-headless-seed'); expect(ids).toContain('set-codex-trust-home'); expect(ids).not.toContain('cp-playwright'); expect(ids).not.toContain('cp-chrome-devtools-mcp'); expect(ids).not.toContain('cp-typescript-lsp');
+  it('a retired plugin removes itself; no leftover action turns its uninstall into something else', () => {
+    for (const c of m.retired ?? []) if (c.spec.kind === 'claude-plugin') expect(c.spec.action, c.id).toBeUndefined();
+  });
+  it('capabilities that changed route keep their hosts on the successor', () => {
+    const next = (id: string) => (m.retired ?? []).find((c) => c.id === id)?.replacedBy;
+    expect(next('cp-context7')).toBe('mcp-context7'); expect(next('cx-superpowers-remote')).toBe('cx-superpowers'); expect(next('sk-mattpocock-core')).toBe('sk-mattpocock');
+  });
+  it('security-guidance always brings its Stop-review setting, also on a host with a saved selection', () => {
+    expect(resolveSelection(m, host('linux'), { savedIds: ['cp-security-guidance'] }).components.map((c) => c.id)).toContain('set-security-stop-review');
+  });
+  it('the mattpocock wrapper skill ships with the skill it calls', () => {
+    const c = m.components.find((x) => x.id === 'sk-mattpocock')!.spec as { skills: string[] };
+    expect(c.skills).toEqual(expect.arrayContaining(['grill-me', 'grilling']));
+  });
+  it('Context7 on Claude uses the URL that works without auth', () => {
+    expect((m.components.find((c) => c.id === 'mcp-context7')!.spec as { url: string }).url).toBe('https://mcp.context7.com/mcp');
+  });
+  it('declares the installer version that understands retirement', () => { expect(m.minInstallerVersion).toBe('0.5.0'); });
+  it('Windows gets its git setting and leaves out Linux-only tools', () => {
+    const ids = defaults('windows');
+    expect(ids).toContain('set-windows-git-symlinks'); expect(ids).not.toContain('bubblewrap');
   });
   it('windows default tool set installs admin-free via scoop (Task 6: zero UAC)', () => {
     for (const id of ['jq', 'ripgrep', 'gh', 'go', 'uv', 'powershell-7']) {
@@ -49,21 +57,6 @@ describe('manifest.json', () => {
   it('no postInstallHint starts with a command we could run instead (it belongs in postInstall)', () => {
     const EXECUTABLES = /^(npm|npx|node|curl|wget|sh|bash|pwsh|powershell|setx|export|claude|codex|scoop|winget|choco|brew|apt-get|gh|go|uv|uvx|pip|pipx|fnm|git)\b/;
     for (const c of m.components) if (c.postInstallHint) expect(c.postInstallHint, c.id).not.toMatch(EXECUTABLES);
-  });
-  it('the Home Assistant MCP logins run as spec postInstall actions, not as hints', () => {
-    for (const id of ['mcp-ha-claude', 'mcp-ha-codex']) {
-      const c = m.components.find((x) => x.id === id)!;
-      expect(c.postInstallHint, id).toBeUndefined();
-      expect(c.spec.kind, id).toBe('mcp');
-      expect((c.spec as { postInstall?: string[][] }).postInstall, id).toEqual([[id.endsWith('codex') ? 'codex' : 'claude', 'mcp', 'login', 'homeassistant']]);
-    }
-  });
-  it('sk-agent-browser installs its CLI as postInstall, not a hint', () => {
-    const c = m.components.find((x) => x.id === 'sk-agent-browser')!;
-    expect(c.postInstallHint).toBeUndefined();
-    expect(c.spec.kind).toBe('skill');
-    expect((c.spec as { postInstall?: string[][] }).postInstall).toEqual([['npm', 'install', '-g', 'agent-browser@{{version}}'], ['agent-browser', 'install']]);
-    expect(c.versions?.version).toMatchObject({ registry: 'npm', package: 'agent-browser' });
   });
   it('every skill component has audit entries (also skills: "*" ones)', () => {
     for (const c of m.components) if (c.spec.kind === 'skill') { expect(c.audit?.length, c.id).toBeGreaterThan(0); for (const a of c.audit ?? []) expect(`${a.owner}/${a.repo}`, c.id).toBe(c.spec.repo.replace(/^https:\/\/github\.com\//, '')); }
@@ -148,22 +141,11 @@ describe('registry versions (Finding 8, then resolved at run time)', () => {
   it('a major-version hold names the major its pin is on', () => {
     for (const c of m.components) for (const [k, v] of Object.entries(c.versions ?? {})) if (v.major !== undefined) expect(Number(v.pin.split('.')[0]), `${c.id}.${k}`).toBe(v.major);
   });
-  it('the caveman CLI stays on 1.x until the hook provider is verified against 2.x', () => {
-    expect(m.components.find((c) => c.id === 'caveman-cli')!.versions?.version?.major).toBe(1);
-  });
 });
 
 describe('MCP server names', () => {
   it('never carry a version: a name is the identity agents and permission rules key on, and a bump must not orphan the old entry', () => {
     // v0.4.0's pinning pass rewrote mcp-n8n-claude's name to `n8n-mcp@2.87.0` along with its args
     for (const c of m.components) if (c.spec.kind === 'mcp') expect(c.spec.name, c.id).toMatch(/^[a-z0-9][a-z0-9_-]*$/i);
-    const n8n = m.components.find((c) => c.id === 'mcp-n8n-claude')!.spec as { name: string; formerNames?: string[] };
-    expect(n8n.name).toBe('n8n-mcp'); expect(n8n.formerNames).toContain('n8n-mcp@2.87.0');
-  });
-});
-
-describe('channels', () => {
-  it('only the proxmox-host profile defaults to the stable channel', () => {
-    expect(Object.entries(m.profiles).filter(([, p]) => p?.channel === 'stable').map(([n]) => n)).toEqual(['proxmox-host']);
   });
 });

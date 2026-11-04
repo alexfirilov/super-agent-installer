@@ -15,6 +15,8 @@ export async function driftReport(ctx: Ctx, components: Component[]): Promise<Dr
     if (want === 'uninstall') status = present ? 'outdated' : 'ok';
     else if (want === 'disable') status = present && (installedDetails?.enabled ?? true) ? 'outdated' : 'ok';
     else status = !present ? 'missing' : p.latest && latest === null ? 'unknown' : isNewer(latest, installed) ? 'outdated' : 'ok';
+    // a skill has only a content hash, so upstream itself is asked whether it moved
+    if (p.stale && status === 'ok') { let moved: boolean | null = null; try { moved = await p.stale(c, ctx); } catch { /* cannot tell */ } status = moved === null ? 'unknown' : moved ? 'outdated' : 'ok'; }
     // an MCP entry carries no version of its own: it is behind when its launch line (command, args with the resolved
     // package version, env) is not what install would write now
     if (c.kind === 'mcp' && status === 'ok') { try { if ((await p.plan(c, ctx, { version: installed, details: installedDetails }, 'install')).some((a) => a.op !== 'skip')) status = 'outdated'; } catch { /* keep ok */ } }

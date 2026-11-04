@@ -21,6 +21,9 @@ const samePath = (a: string, b: string) => (process.platform === 'win32' ? resol
 export function ownsRow(row: ClaudeState['plugins'][number], cwd = process.cwd()): boolean { return row.scope === 'user' || !row.projectPath || samePath(row.projectPath, cwd); }
 export const claudePluginProvider: Provider = {
   kind: 'claude-plugin',
+  // A marketplace entry usually declares no version (or only a commit), so nothing here compares with what is installed.
+  // Null reads as `unknown` in `check`, which is the truth; `ok` would claim a freshness nobody measured.
+  async latest() { return null; },
   async detect(c, ctx) {
     if (c.spec.kind !== 'claude-plugin') return null; const st = await getClaudeState(ctx); if (!st.installed) return null;
     const id = `${c.spec.plugin}@${c.spec.marketplace}`; const rows = st.plugins.filter((p) => p.id === id && ownsRow(p)); if (!rows.length) return null;
@@ -71,7 +74,8 @@ export const claudePluginProvider: Provider = {
       for (const p of st.plugins) if (p.id === id) p.enabled = true;
       return ok(`${id} enabled`);
     }));
-    if (mode === 'update') acts.push(action(c.id, 'update', `update ${id}`, async () => {
+    // install and update both converge on the marketplace; `claude plugin update` is the only thing that can tell what is newest
+    acts.push(action(c.id, 'update', `update ${id}`, async () => {
       await refreshMarketplace(ctx, spec.marketplace);
       const r = await ctx.run(['claude', 'plugin', 'update', id, '--json'], { allowFailure: true, timeoutMs: 600000 }); const j = asJsonObject(lastJsonLine(r.stdout));
       if (r.code !== 0) return fail(`update ${id} failed: ${(j?.failureCode as string) ?? r.stderr.trim()}`);
