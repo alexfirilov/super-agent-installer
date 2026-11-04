@@ -496,44 +496,6 @@
       }
     },
     {
-      "id": "ccusage",
-      "name": "ccusage",
-      "kind": "tool",
-      "agents": "both",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "Token/cost reports for Claude Code and Codex from local logs (`ccusage daily`, `ccusage codex daily`)",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "prerequisites": [
-        "node"
-      ],
-      "popularity": {
-        "stars": 18587,
-        "observedAt": "2026-09-17"
-      },
-      "spec": {
-        "kind": "tool",
-        "probe": [
-          "ccusage",
-          "--version"
-        ],
-        "packages": {
-          "npm": "ccusage@{{version}}"
-        }
-      },
-      "versions": {
-        "version": {
-          "registry": "npm",
-          "package": "ccusage",
-          "pin": "20.0.28"
-        }
-      }
-    },
-    {
       "id": "cp-superpowers",
       "name": "superpowers",
       "kind": "claude-plugin",
@@ -601,8 +563,8 @@
         "darwin"
       ],
       "description": "/commit, /commit-push-pr, /clean_gone",
-      "verdict": "optional",
-      "defaultSelected": false,
+      "verdict": "recommended",
+      "defaultSelected": true,
       "contextCostTokens": {
         "claude": 108
       },
@@ -756,38 +718,6 @@
       }
     },
     {
-      "id": "cp-claude-hud",
-      "name": "claude-hud",
-      "kind": "claude-plugin",
-      "agents": "claude",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "Rich status line (context %, tools, agents, todos); run /claude-hud:setup after install",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "prerequisites": [
-        "node"
-      ],
-      "contextCostTokens": {
-        "claude": 0
-      },
-      "popularity": {
-        "stars": 28095,
-        "observedAt": "2026-09-17"
-      },
-      "source": "https://github.com/jarrodwatts/claude-hud",
-      "postInstallHint": "In Claude Code run /claude-hud:setup",
-      "spec": {
-        "kind": "claude-plugin",
-        "marketplace": "claude-hud",
-        "marketplaceSource": "jarrodwatts/claude-hud",
-        "plugin": "claude-hud"
-      }
-    },
-    {
       "id": "mcp-cx-context7",
       "name": "context7 (Codex)",
       "kind": "mcp",
@@ -915,28 +845,6 @@
         "windowsGitConfig": {
           "core.symlinks": "true"
         }
-      }
-    },
-    {
-      "id": "sl-claude-hud",
-      "name": "claude-hud status line",
-      "kind": "statusline",
-      "agents": "claude",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "Hand the status line to claude-hud (requires the claude-hud plugin)",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "dependsOn": [
-        "cp-claude-hud"
-      ],
-      "slot": "statusline",
-      "spec": {
-        "kind": "statusline",
-        "provider": "claude-hud"
       }
     },
     {
@@ -1068,9 +976,9 @@
         "windows",
         "darwin"
       ],
-      "description": "grill-me and grilling (interview a plan), handoff, writing-for-agents, improve-codebase-architecture",
-      "verdict": "optional",
-      "defaultSelected": false,
+      "description": "grill-me and grilling (interview a plan), handoff, writing-for-agents, improve-codebase-architecture with the codebase-design and domain-modeling skills it calls",
+      "verdict": "recommended",
+      "defaultSelected": true,
       "prerequisites": [
         "node"
       ],
@@ -1083,7 +991,9 @@
           "grilling",
           "handoff",
           "writing-for-agents",
-          "improve-codebase-architecture"
+          "improve-codebase-architecture",
+          "codebase-design",
+          "domain-modeling"
         ],
         "targets": [
           "claude-code",
@@ -1115,155 +1025,91 @@
           "owner": "mattpocock",
           "repo": "skills",
           "skill": "improve-codebase-architecture"
-        }
-      ]
-    },
-    {
-      "id": "sk-trailofbits",
-      "name": "Trail of Bits skills",
-      "kind": "skill",
-      "agents": "both",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "semgrep scanning, supply-chain risk audit, modern Python tooling",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "prerequisites": [
-        "node"
-      ],
-      "source": "https://github.com/trailofbits/skills",
-      "spec": {
-        "kind": "skill",
-        "repo": "trailofbits/skills",
-        "skills": [
-          "semgrep",
-          "supply-chain-risk-auditor",
-          "modern-python"
-        ],
-        "targets": [
-          "claude-code",
-          "codex"
-        ]
-      },
-      "audit": [
-        {
-          "owner": "trailofbits",
-          "repo": "skills",
-          "skill": "semgrep"
         },
         {
-          "owner": "trailofbits",
+          "owner": "mattpocock",
           "repo": "skills",
-          "skill": "supply-chain-risk-auditor"
+          "skill": "codebase-design"
         },
         {
-          "owner": "trailofbits",
+          "owner": "mattpocock",
           "repo": "skills",
-          "skill": "modern-python"
-        }
-      ]
-    },
-    {
-      "id": "sk-hashicorp-terraform",
-      "name": "HashiCorp Terraform skills",
-      "kind": "skill",
-      "agents": "both",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "Terraform tests, module refactoring and style guide, from the vendor",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "prerequisites": [
-        "node"
-      ],
-      "source": "https://github.com/hashicorp/agent-skills",
-      "spec": {
-        "kind": "skill",
-        "repo": "hashicorp/agent-skills",
-        "skills": [
-          "terraform-test",
-          "refactor-module",
-          "terraform-style-guide"
-        ],
-        "targets": [
-          "claude-code",
-          "codex"
-        ]
-      },
-      "audit": [
-        {
-          "owner": "hashicorp",
-          "repo": "agent-skills",
-          "skill": "terraform-test"
-        },
-        {
-          "owner": "hashicorp",
-          "repo": "agent-skills",
-          "skill": "refactor-module"
-        },
-        {
-          "owner": "hashicorp",
-          "repo": "agent-skills",
-          "skill": "terraform-style-guide"
-        }
-      ]
-    },
-    {
-      "id": "sk-docker",
-      "name": "Docker skills",
-      "kind": "skill",
-      "agents": "both",
-      "platforms": [
-        "linux",
-        "windows",
-        "darwin"
-      ],
-      "description": "Compose patterns, build strategies and guardrails for destructive commands, from the vendor",
-      "verdict": "optional",
-      "defaultSelected": false,
-      "prerequisites": [
-        "node"
-      ],
-      "source": "https://github.com/docker/skills",
-      "spec": {
-        "kind": "skill",
-        "repo": "docker/skills",
-        "skills": [
-          "docker-compose-patterns",
-          "docker-build-strategies",
-          "docker-destructive-guardrails"
-        ],
-        "targets": [
-          "claude-code",
-          "codex"
-        ]
-      },
-      "audit": [
-        {
-          "owner": "docker",
-          "repo": "skills",
-          "skill": "docker-compose-patterns"
-        },
-        {
-          "owner": "docker",
-          "repo": "skills",
-          "skill": "docker-build-strategies"
-        },
-        {
-          "owner": "docker",
-          "repo": "skills",
-          "skill": "docker-destructive-guardrails"
+          "skill": "domain-modeling"
         }
       ]
     }
   ],
   "retired": [
+    {
+      "id": "ccusage",
+      "name": "ccusage",
+      "kind": "tool",
+      "agents": "both",
+      "platforms": [
+        "linux",
+        "windows",
+        "darwin"
+      ],
+      "description": "Token/cost reports for Claude Code and Codex from local logs (`ccusage daily`, `ccusage codex daily`)",
+      "verdict": "optional",
+      "defaultSelected": false,
+      "spec": {
+        "kind": "tool",
+        "probe": [
+          "ccusage",
+          "--version"
+        ],
+        "packages": {
+          "npm": "ccusage@{{version}}"
+        }
+      },
+      "versions": {
+        "version": {
+          "registry": "npm",
+          "package": "ccusage",
+          "pin": "20.0.28"
+        }
+      }
+    },
+    {
+      "id": "cp-claude-hud",
+      "name": "claude-hud",
+      "kind": "claude-plugin",
+      "agents": "claude",
+      "platforms": [
+        "linux",
+        "windows",
+        "darwin"
+      ],
+      "description": "Rich status line (context %, tools, agents, todos); run /claude-hud:setup after install",
+      "verdict": "optional",
+      "defaultSelected": false,
+      "source": "https://github.com/jarrodwatts/claude-hud",
+      "spec": {
+        "kind": "claude-plugin",
+        "marketplace": "claude-hud",
+        "marketplaceSource": "jarrodwatts/claude-hud",
+        "plugin": "claude-hud"
+      }
+    },
+    {
+      "id": "sl-claude-hud",
+      "name": "claude-hud status line",
+      "kind": "statusline",
+      "agents": "claude",
+      "platforms": [
+        "linux",
+        "windows",
+        "darwin"
+      ],
+      "description": "Hand the status line to claude-hud (requires the claude-hud plugin)",
+      "verdict": "optional",
+      "defaultSelected": false,
+      "spec": {
+        "kind": "statusline",
+        "provider": "claude-hud"
+      }
+    },
     {
       "id": "caveman-cli",
       "name": "@caveman-ai/cli",
